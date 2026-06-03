@@ -1,15 +1,15 @@
-      ═══════════════════════════════════════════════════════════ -->
- 
+═══════════════════════════════════════════════════════════ -->
+
 <div id="editor-overlay" class="editor-overlay">
   <div class="editor-modal">
- 
+
     <div class="editor-modal-header">
       <h2 id="editor-title" class="editor-modal-title">New Character</h2>
       <button id="editor-close" class="editor-close" aria-label="Close">✕</button>
     </div>
- 
+
     <form id="char-editor-form" class="editor-form">
- 
+
       <!-- ── Core info ── -->
       <fieldset class="editor-fieldset">
         <legend>Basic Info</legend>
@@ -28,10 +28,19 @@
         </div>
         <div class="editor-row">
           <label>Occupation <input type="text" id="ef-occupation" /></label>
+      </fieldset>
+
+      <fieldset class="editor-fieldset">
+        <legend>Main Images</legend>
+        <div class="editor-row">
           <label>Ref Image URL <input type="url" id="ef-refImage" placeholder="https://..." /></label>
         </div>
+
+        <div class="editor-row">
+          <label>Title Image URL <input type="url" id="ef-titleImage" placeholder="https://..." /></label>
+        </div>
       </fieldset>
- 
+
       <!-- ── Appearance ── -->
       <fieldset class="editor-fieldset">
         <legend>Appearance</legend>
@@ -39,7 +48,7 @@
           <textarea id="ef-appearance" rows="3" placeholder="Describe the character's appearance..."></textarea>
         </label>
       </fieldset>
- 
+
       <!-- ── Overview & history ── -->
       <fieldset class="editor-fieldset">
         <legend>Overview &amp; History</legend>
@@ -53,20 +62,20 @@
           <textarea id="ef-history" rows="4" placeholder="Continues under 'click here to read more'..."></textarea>
         </label>
       </fieldset>
- 
+
       <!-- ── Links ── -->
       <fieldset class="editor-fieldset">
         <legend>Links</legend>
         <div class="editor-row">
-          <label>Unvale URL        <input type="url" id="ef-links_unvale"       placeholder="https://..." /></label>
-          <label>CharacterHub URL  <input type="url" id="ef-links_characterhub" placeholder="https://..." /></label>
+          <label>Unvale URL <input type="url" id="ef-links_unvale" placeholder="https://..." /></label>
+          <label>CharacterHub URL <input type="url" id="ef-links_characterhub" placeholder="https://..." /></label>
         </div>
         <div class="editor-row">
-          <label>Artfight URL      <input type="url" id="ef-links_artfight"     placeholder="https://..." /></label>
-          <label>Spotify Playlist  <input type="url" id="ef-links_spotify"      placeholder="https://..." /></label>
+          <label>Artfight URL <input type="url" id="ef-links_artfight" placeholder="https://..." /></label>
+          <label>Spotify Playlist <input type="url" id="ef-links_spotify" placeholder="https://..." /></label>
         </div>
       </fieldset>
- 
+
       <!-- ── Gallery ── -->
       <fieldset class="editor-fieldset">
         <legend>Gallery</legend>
@@ -85,14 +94,13 @@
         </table>
         <button type="button" id="add-gallery-row" class="add-gallery-btn">+ Add Image</button>
       </fieldset>
- 
+
       <div class="editor-actions">
         <button type="button" id="editor-close-bottom" class="editor-btn-cancel"
           onclick="document.getElementById('editor-close').click()">Cancel</button>
         <button type="submit" class="editor-btn-save">Save Character</button>
       </div>
- 
+
     </form>
   </div>
 </div>
- 

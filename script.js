@@ -252,6 +252,15 @@ function loadCharacterPage() {
   } else if (refWrap) {
     refWrap.style.display = "none";
   }
+  
+const titleImg = document.querySelector(".char-title-img");
+
+if (character.titleImage && titleImg) {
+  titleImg.src = character.titleImage;
+  titleImg.style.display = "block";
+} else if (titleImg) {
+  titleImg.style.display = "none";
+}
 
   renderGallery(character.gallery || []);
   document.title = (character.name || "Character") + " — Character Sheet";
@@ -424,7 +433,7 @@ function openEditor(id) {
 
   const fields = [
     "name","fandom","nicknames","pronouns","age","birthday",
-    "heritage","occupation","refImage","appearance","overview",
+    "heritage","occupation","refImage","titleImage","appearance","overview",
     "background","history",
     "links.unvale","links.characterhub","links.artfight","links.spotify"
   ];
@@ -471,6 +480,14 @@ function addGalleryRow(item) {
 
 async function handleFormSubmit(e) {
   e.preventDefault();
+  const name = val("ef-name");
+const fandom = val("ef-fandom");
+
+if (!name || !fandom) {
+  alert("You need both a Name and a Fandom before saving.");
+  return;
+}
+
   const val = function(id) { return (document.getElementById(id)?.value || "").trim(); };
 
   const gallery = Array.from(document.querySelectorAll("#gallery-rows tr")).map(function(tr) {
@@ -491,6 +508,7 @@ async function handleFormSubmit(e) {
     birthday:   val("ef-birthday"),
     heritage:   val("ef-heritage"),
     occupation: val("ef-occupation"),
+    titleImage: val("ef-titleImage"),
     refImage:   val("ef-refImage"),
     appearance: val("ef-appearance"),
     overview:   val("ef-overview"),
