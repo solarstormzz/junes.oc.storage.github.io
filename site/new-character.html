@@ -1,0 +1,98 @@
+      ═══════════════════════════════════════════════════════════ -->
+ 
+<div id="editor-overlay" class="editor-overlay">
+  <div class="editor-modal">
+ 
+    <div class="editor-modal-header">
+      <h2 id="editor-title" class="editor-modal-title">New Character</h2>
+      <button id="editor-close" class="editor-close" aria-label="Close">✕</button>
+    </div>
+ 
+    <form id="char-editor-form" class="editor-form">
+ 
+      <!-- ── Core info ── -->
+      <fieldset class="editor-fieldset">
+        <legend>Basic Info</legend>
+        <div class="editor-row">
+          <label>Name <input type="text" id="ef-name" placeholder="Character name" /></label>
+          <label>Fandom / Setting <input type="text" id="ef-fandom" placeholder="e.g. Original, Tolkien AU" /></label>
+        </div>
+        <div class="editor-row">
+          <label>Nicknames <input type="text" id="ef-nicknames" placeholder="Comma-separated" /></label>
+          <label>Pronouns <input type="text" id="ef-pronouns" placeholder="e.g. she/her" /></label>
+        </div>
+        <div class="editor-row">
+          <label>Age <input type="text" id="ef-age" /></label>
+          <label>Birthday <input type="text" id="ef-birthday" placeholder="Month Day" /></label>
+          <label>Heritage <input type="text" id="ef-heritage" /></label>
+        </div>
+        <div class="editor-row">
+          <label>Occupation <input type="text" id="ef-occupation" /></label>
+          <label>Ref Image URL <input type="url" id="ef-refImage" placeholder="https://..." /></label>
+        </div>
+      </fieldset>
+ 
+      <!-- ── Appearance ── -->
+      <fieldset class="editor-fieldset">
+        <legend>Appearance</legend>
+        <label class="editor-label-full">
+          <textarea id="ef-appearance" rows="3" placeholder="Describe the character's appearance..."></textarea>
+        </label>
+      </fieldset>
+ 
+      <!-- ── Overview & history ── -->
+      <fieldset class="editor-fieldset">
+        <legend>Overview &amp; History</legend>
+        <label class="editor-label-full">Overview
+          <textarea id="ef-overview" rows="3" placeholder="Short summary shown at the top of the page..."></textarea>
+        </label>
+        <label class="editor-label-full">Background (visible)
+          <textarea id="ef-background" rows="3" placeholder="First paragraph of history, always visible..."></textarea>
+        </label>
+        <label class="editor-label-full">History (hidden under spoiler)
+          <textarea id="ef-history" rows="4" placeholder="Continues under 'click here to read more'..."></textarea>
+        </label>
+      </fieldset>
+ 
+      <!-- ── Links ── -->
+      <fieldset class="editor-fieldset">
+        <legend>Links</legend>
+        <div class="editor-row">
+          <label>Unvale URL        <input type="url" id="ef-links_unvale"       placeholder="https://..." /></label>
+          <label>CharacterHub URL  <input type="url" id="ef-links_characterhub" placeholder="https://..." /></label>
+        </div>
+        <div class="editor-row">
+          <label>Artfight URL      <input type="url" id="ef-links_artfight"     placeholder="https://..." /></label>
+          <label>Spotify Playlist  <input type="url" id="ef-links_spotify"      placeholder="https://..." /></label>
+        </div>
+      </fieldset>
+ 
+      <!-- ── Gallery ── -->
+      <fieldset class="editor-fieldset">
+        <legend>Gallery</legend>
+        <table class="gallery-editor-table">
+          <thead>
+            <tr>
+              <th>Image URL</th>
+              <th>Caption</th>
+              <th>Year</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="gallery-rows">
+            <!-- Rows added dynamically -->
+          </tbody>
+        </table>
+        <button type="button" id="add-gallery-row" class="add-gallery-btn">+ Add Image</button>
+      </fieldset>
+ 
+      <div class="editor-actions">
+        <button type="button" id="editor-close-bottom" class="editor-btn-cancel"
+          onclick="document.getElementById('editor-close').click()">Cancel</button>
+        <button type="submit" class="editor-btn-save">Save Character</button>
+      </div>
+ 
+    </form>
+  </div>
+</div>
+ 

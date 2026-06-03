@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Character Sheet</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400&family=DM+Sans:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    /* ── Page padding ── */
+    .page {
+      padding: 2.5rem 3rem;
+      margin-top: 1.25rem;
+    }
+    @media (max-width: 640px) {
+      .page { padding: 1.5rem 1.25rem; margin-top: 0.75rem; }
+    }
+
+    /* ─────────────────────────────────────────────
+       REF IMAGE — layout when .char-ref IS present
+       The sheet switches to a 3-area grid:
+         [basics]  [ref]
+         [overview overview]
+    ───────────────────────────────────────────── */
+    .char-sheet:has(.char-ref-wrap[style*="block"]) {
+      display: grid;
+      grid-template-columns: 280px auto;
+      grid-template-rows: auto auto;
+      grid-template-areas:
+        "basics ref"
+        "overview overview";
+      gap: 1.25rem;
+      align-items: start;
+    }
+
+    .char-ref-wrap {
+      grid-area: ref;
+      display: none;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      align-self: start;
+    }
+
+    .char-ref {
+      display: block;
+      width: 100%;
+      max-height: 420px;
+      object-fit: cover;
+    }
+
+    .char-sheet:has(.char-ref-wrap[style*="block"]) .char-basics {
+      grid-area: basics;
+      width: 100%;
+    }
+
+    .char-sheet:has(.char-ref-wrap[style*="block"]) .char-overview {
+      grid-area: overview;
+    }
+
+    @media (max-width: 820px) {
+      .char-sheet:has(.char-ref-wrap[style*="block"]) {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+          "ref"
+          "basics"
+          "overview";
+      }
+      .char-ref {
+        max-height: 280px;
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ===== CHARACTER NAV ===== -->
+<nav class="char-nav">
+  <a href="index.html" class="char-nav-back">Back</a>
+  <div class="char-nav-tabs">
+    <a href="#info" class="char-nav-tab active">Info</a>
+    <a href="#gallery" class="char-nav-tab">Gallery</a>
+  </div>
+</nav>
+
+<!-- ===== INFO SECTION ===== -->
+<div id="info" class="page">
+  <div class="char-sheet">
+
+    <!-- REF IMAGE — shown/hidden by script.js -->
+    <div class="char-ref-wrap" style="display:none">
+      <img class="char-ref" src="" alt="Character reference sheet" />
+    </div>
+
+    <!-- LEFT: BASICS -->
+    <aside class="char-basics">
+
+      <h1 class="char-name" id="char-name"></h1>
+      <p class="char-fandom" id="char-fandom"></p>
+
+      <table class="char-table">
+        <tr>
+          <td>Nicknames</td>
+          <td id="char-nicknames"></td>
+        </tr>
+        <tr>
+          <td>Pronouns</td>
+          <td id="char-pronouns"></td>
+        </tr>
+        <tr>
+          <td>Age</td>
+          <td id="char-age"></td>
+        </tr>
+        <tr>
+          <td>Birthday</td>
+          <td id="char-birthday"></td>
+        </tr>
+        <tr>
+          <td>Heritage</td>
+          <td id="char-heritage"></td>
+        </tr>
+        <tr>
+          <td>Occupation</td>
+          <td id="char-occupation"></td>
+        </tr>
+      </table>
+
+      <h2 class="char-section-heading">Appearance</h2>
+      <p class="char-body" id="char-appearance"></p>
+
+      <h2 class="char-section-heading">Links</h2>
+      <ul class="char-links" id="char-links-list">
+        <li id="char-unvale-li"><a href="#" id="char-unvale">Unvale</a></li>
+        <li id="char-characterhub-li"><a href="#" id="char-characterhub">CharacterHub</a></li>
+        <li id="char-artfight-li"><a href="#" id="char-artfight">Artfight</a></li>
+        <li id="char-spotify-li"><a href="#" id="char-spotify">Playlist</a></li>
+      </ul>
+
+    </aside>
+
+    <!-- RIGHT: OVERVIEW -->
+    <main class="char-overview">
+
+      <h2 class="char-overview-heading">Overview</h2>
+      <p class="char-body" style="margin-bottom: 20px;" id="char-overview"></p>
+
+      <h2 class="char-overview-subheading">Background &amp; History</h2>
+      <p class="char-body" style="margin-bottom: 12px;" id="char-background"></p>
+
+      <details class="char-details">
+        <summary>click here to read more</summary>
+        <p id="char-history"></p>
+      </details>
+
+    </main>
+
+  </div>
+</div>
+
+<!-- ===== GALLERY SECTION ===== -->
+<section id="gallery">
+  <h2 class="gallery-heading">Gallery</h2>
+  <div class="gallery-grid">
+    <!-- Populated by script.js -->
+  </div>
+</section>
+
+<script src="script.js"></script>
+<script>
+  // Highlight active nav tab on scroll
+  const tabs = document.querySelectorAll('.char-nav-tab');
+  const sections = ['info', 'gallery'].map(id => document.getElementById(id));
+
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        tabs.forEach(t => t.classList.remove('active'));
+        const active = document.querySelector(`.char-nav-tab[href="#${entry.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { threshold: 0.35 });
+
+  sections.forEach(s => { if (s) observer.observe(s); });
+</script>
+
+</body>
+</html>
