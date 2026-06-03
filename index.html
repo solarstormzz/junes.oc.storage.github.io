@@ -23,7 +23,18 @@
       <input class="search-input" type="search" placeholder="Search…" id="search-input" />
     </div>
     <button id="nav-add-btn" class="nav-add-btn" title="New Character">＋</button>
+    <button id="nav-settings-btn" class="nav-settings-btn" title="GitHub Sync Settings">⚙</button>
+    <span id="sync-status" class="sync-status" title=""></span>
   </nav>
+
+  <!-- Sync banner — shown to users who haven't connected GitHub yet -->
+  <div id="sync-banner" class="sync-banner" style="display:none">
+    <span class="sync-banner-text">✦ Connect GitHub to save your characters across all devices</span>
+    <div class="sync-banner-actions">
+      <button id="sync-banner-btn" class="sync-banner-btn">Set up sync</button>
+      <button id="sync-banner-dismiss" class="sync-banner-dismiss">✕</button>
+    </div>
+  </div>
 
   <section class="char-index-section">
     <div class="char-index-header">
@@ -39,6 +50,47 @@
     <span class="footer-logo">June's Character Storage</span>
     <span class="footer-copy">© 2026 — All rights reserved</span>
   </footer>
+
+  <!-- ═══════════════════════════════════ SETUP MODAL ════════════════════════════════════ -->
+  <div id="setup-overlay" class="editor-overlay">
+    <div class="editor-modal" style="max-width:480px">
+      <div class="editor-modal-header">
+        <h2 class="editor-modal-title">GitHub Sync Setup</h2>
+        <button id="setup-close" class="editor-close" aria-label="Close">✕</button>
+      </div>
+      <div style="padding:1.5rem;display:flex;flex-direction:column;gap:1.1rem;">
+        <p style="font-size:.85rem;line-height:1.65;color:var(--ink-mid)">
+          Your characters will be saved to a private GitHub Gist and synced across all your devices.
+          You only need to set this up once per browser.
+        </p>
+        <div style="display:flex;flex-direction:column;gap:.35rem">
+          <label style="font-size:.78rem;font-weight:600;color:var(--ink-mid);font-family:'DM Sans',sans-serif">
+            Personal Access Token <span style="font-weight:400">(gist scope only)</span>
+          </label>
+          <input id="setup-token" type="password" placeholder="ghp_…"
+            style="font-family:'DM Sans',sans-serif;font-size:.85rem;padding:.4rem .65rem;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--ink);width:100%;outline:none" />
+        </div>
+        <div style="display:flex;flex-direction:column;gap:.35rem">
+          <label style="font-size:.78rem;font-weight:600;color:var(--ink-mid);font-family:'DM Sans',sans-serif">
+            Gist ID
+          </label>
+          <input id="setup-gist" type="text" placeholder="abc123def456…"
+            style="font-family:'DM Sans',sans-serif;font-size:.85rem;padding:.4rem .65rem;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--ink);width:100%;outline:none" />
+        </div>
+        <p style="font-size:.75rem;color:var(--ink-light);line-height:1.6">
+          Generate a token at <strong>GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)</strong> with only the <code style="background:var(--surface);padding:.1rem .3rem;border-radius:3px">gist</code> scope ticked.<br/><br/>
+          Create your Gist at <strong>gist.github.com</strong> — add a file called <code style="background:var(--surface);padding:.1rem .3rem;border-radius:3px">characters.json</code> containing <code style="background:var(--surface);padding:.1rem .3rem;border-radius:3px">[]</code>, set it to Secret, and copy the ID from the URL.
+        </p>
+        <div id="setup-error" style="display:none;font-size:.8rem;color:#a05050;padding:.5rem .75rem;background:#f5e8e8;border-radius:4px"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:.75rem;padding-top:.25rem">
+          <button id="setup-clear" class="editor-btn-cancel" style="font-size:.75rem;padding:.35rem .9rem">
+            Disconnect
+          </button>
+          <button id="setup-save" class="editor-btn-save">Connect &amp; Sync</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- ═══════════════════════════════════ EDITOR MODAL ═══════════════════════════════════ -->
   <div id="editor-overlay" class="editor-overlay">

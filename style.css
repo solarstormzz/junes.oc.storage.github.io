@@ -596,7 +596,127 @@ footer {
   margin-top: 6px;
 }
 
-/* ── INDEX SECTION ── */
+/* ── NAV SETTINGS BUTTON ── */
+
+.nav-settings-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  font-size: 1rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--ink-mid);
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+
+.nav-settings-btn:hover {
+  color: var(--ink);
+  border-color: #b5afa6;
+  background: var(--surface);
+}
+
+.nav-settings-btn.settings-connected {
+  border-color: #8cb898;
+  color: #4a7a52;
+}
+
+/* ── SYNC STATUS DOT ── */
+
+.sync-status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--border);
+  transition: background 0.3s;
+  cursor: default;
+}
+
+.sync-status.sync-ok      { background: #6db87a; }
+.sync-status.sync-error   { background: #c97070; }
+.sync-status.sync-syncing {
+  background: #a0b4c8;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+/* ── SYNC BANNER ── */
+
+.sync-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.65rem 3rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  animation: fadeUp 0.4s ease both;
+}
+
+.sync-banner-text {
+  font-size: 0.8rem;
+  color: var(--ink-mid);
+}
+
+.sync-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.sync-banner-btn {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.3rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--card);
+  color: var(--ink);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.sync-banner-btn:hover {
+  background: var(--card);
+  border-color: #b5afa6;
+}
+
+.sync-banner-dismiss {
+  background: none;
+  border: none;
+  font-size: 0.8rem;
+  color: var(--ink-light);
+  cursor: pointer;
+  padding: 0.2rem 0.35rem;
+  border-radius: 3px;
+  transition: color 0.15s;
+}
+
+.sync-banner-dismiss:hover {
+  color: var(--ink-mid);
+}
+
+@media (max-width: 640px) {
+  .sync-banner {
+    padding: 0.65rem 1.25rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+}
+
+
 
 .char-index-section {
   padding: 2.5rem 3rem;
