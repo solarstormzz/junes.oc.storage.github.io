@@ -9,7 +9,6 @@
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400&family=DM+Sans:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
   <style>
-    /* ── Page padding ── */
     .page {
       padding: 2.5rem 3rem;
       margin-top: 1.25rem;
@@ -18,12 +17,8 @@
       .page { padding: 1.5rem 1.25rem; margin-top: 0.75rem; }
     }
 
-    /* ─────────────────────────────────────────────
-       REF IMAGE — layout when .char-ref IS present
-       The sheet switches to a 3-area grid:
-         [basics]  [ref]
-         [overview overview]
-    ───────────────────────────────────────────── */
+    /* ── REF IMAGE: 5:4 ratio, full image always visible ── */
+    /* CHANGE 3 */
     .char-sheet:has(.char-ref-wrap[style*="block"]) {
       display: grid;
       grid-template-columns: 280px auto;
@@ -43,13 +38,27 @@
       border-radius: 8px;
       overflow: hidden;
       align-self: start;
+      /* 5:4 ratio container */
+      aspect-ratio: 5 / 4;
+      width: 100%;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: var(--surface);
+    }
+
+    /* Override display:none when shown by JS */
+    .char-ref-wrap[style*="block"] {
+      display: flex !important;
     }
 
     .char-ref {
+      /* CHANGE 3: object-fit contain so the full image is always visible within 5:4 box */
       display: block;
       width: 100%;
-      max-height: 420px;
-      object-fit: cover;
+      height: 100%;
+      object-fit: contain;
+      object-position: center;
     }
 
     .char-sheet:has(.char-ref-wrap[style*="block"]) .char-basics {
@@ -69,8 +78,7 @@
           "basics"
           "overview";
       }
-      .char-ref {
-        max-height: 280px;
+      .char-ref-wrap {
         width: 100%;
       }
     }
@@ -91,7 +99,7 @@
 <div id="info" class="page">
   <div class="char-sheet">
 
-    <!-- REF IMAGE — shown/hidden by script.js -->
+    <!-- REF IMAGE — shown/hidden by script.js, locked to 5:4 with contain -->
     <div class="char-ref-wrap" style="display:none">
       <img class="char-ref" src="" alt="Character reference sheet" />
     </div>

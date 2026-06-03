@@ -1,13 +1,10 @@
 // ══════════════════════════════════════════════════════════════════════
 // GITHUB GIST SYNC
-// Credentials stored in localStorage (per-device, never sent anywhere
-// except the official GitHub API). Character data lives in a private
-// Gist and is synced on load and after every write.
 // ══════════════════════════════════════════════════════════════════════
 
 const STORAGE_TOKEN  = "oc_gh_token";
 const STORAGE_GIST   = "oc_gh_gist";
-const STORAGE_LOCAL  = "oc_characters";   // local cache / fallback
+const STORAGE_LOCAL  = "oc_characters";
 const GIST_FILENAME  = "characters.json";
 
 function getCreds() {
@@ -178,7 +175,7 @@ async function handleSetupSave() {
 
     await loadFromGist();
     const grid = document.getElementById("char-grid");
-    if (grid) renderCharacterGrid(grid);
+    if (grid) renderIndexSections(grid);
     updateSettingsBtnStyle();
 
   } catch (err) {
@@ -244,6 +241,7 @@ function loadCharacterPage() {
   setLink("char-artfight",     "char-artfight-li",     character.links?.artfight,     "Artfight");
   setLink("char-spotify",      "char-spotify-li",      character.links?.spotify,      "Playlist");
 
+  // CHANGE 3: ref image locked to 5:4 ratio, object-fit: contain so full image is always visible
   const refWrap = document.querySelector(".char-ref-wrap");
   const img     = document.querySelector(".char-ref");
   if (character.refImage && refWrap && img) {
@@ -252,15 +250,14 @@ function loadCharacterPage() {
   } else if (refWrap) {
     refWrap.style.display = "none";
   }
-  
-const titleImg = document.querySelector(".char-title-img");
 
-if (character.titleImage && titleImg) {
-  titleImg.src = character.titleImage;
-  titleImg.style.display = "block";
-} else if (titleImg) {
-  titleImg.style.display = "none";
-}
+  const titleImg = document.querySelector(".char-title-img");
+  if (character.titleImage && titleImg) {
+    titleImg.src = character.titleImage;
+    titleImg.style.display = "block";
+  } else if (titleImg) {
+    titleImg.style.display = "none";
+  }
 
   renderGallery(character.gallery || []);
   document.title = (character.name || "Character") + " — Character Sheet";
@@ -284,6 +281,7 @@ function setLink(anchorId, liId, href, label) {
   }
 }
 
+// CHANGE 4: Gallery — each image at natural aspect ratio, no crop; title left, year right on same line
 function renderGallery(gallery) {
   const grid = document.querySelector(".gallery-grid");
   if (!grid) return;
@@ -294,10 +292,12 @@ function renderGallery(gallery) {
   grid.innerHTML = gallery.map(item => `
     <div class="gallery-item">
       <div class="gallery-img-wrap">
-        <img src="${escHtml(item.src)}" alt="${escHtml(item.caption || '')}" />
+        <img src="${escHtml(item.src)}" alt="${escHtml(item.caption || '')}" loading="lazy" />
+      </div>
+      <div class="gallery-meta">
+        <span class="gallery-caption">${escHtml(item.caption || "")}</span>
         ${item.year ? `<span class="gallery-year">${escHtml(item.year)}</span>` : ""}
       </div>
-      <p class="gallery-caption">${escHtml(item.caption || "")}</p>
     </div>
   `).join("");
 }
@@ -307,20 +307,19 @@ function renderGallery(gallery) {
 // ══════════════════════════════════════════════════════════════════════
 
 async function loadIndexPage() {
-  const grid = document.getElementById("char-grid");
-  if (!grid) return;
+  const container = document.getElementById("char-sections-container");
+  if (!container) return;
 
   updateSettingsBtnStyle();
 
   if (isConnected()) {
     setStatus("syncing");
-    renderCharacterGrid(grid);       // instant render from cache
-    await loadFromGist();            // then refresh from GitHub
-    renderCharacterGrid(grid);
+    renderIndexSections(container);
+    await loadFromGist();
+    renderIndexSections(container);
   } else {
     setStatus("off");
-    renderCharacterGrid(grid);
-    // Show setup banner for first-time visitors
+    renderIndexSections(container);
     if (!localStorage.getItem("oc_banner_dismissed")) {
       setTimeout(() => {
         const banner = document.getElementById("sync-banner");
@@ -374,48 +373,109 @@ async function loadIndexPage() {
   // Search
   document.getElementById("search-input")
     ?.addEventListener("input", e => {
-      renderCharacterGrid(grid, e.target.value.trim().toLowerCase());
+      renderIndexSections(container, e.target.value.trim().toLowerCase());
     });
 }
 
-function renderCharacterGrid(grid, filter) {
+// CHANGE 5: Index page split into "Recently Edited" row + one row per fandom
+function renderIndexSections(container, filter) {
   filter = filter || "";
   let characters = getCharacters();
+
   if (filter) {
     characters = characters.filter(c =>
       (c.name   || "").toLowerCase().includes(filter) ||
       (c.fandom || "").toLowerCase().includes(filter)
     );
   }
+
   if (!characters.length) {
-    grid.innerHTML = `<p class="empty-state">${filter ? "No characters match your search." : "No characters yet. Add one!"}</p>`;
+    container.innerHTML = `<p class="empty-state" style="padding:1rem 0">${filter ? "No characters match your search." : "No characters yet. Add one!"}</p>`;
     return;
   }
-  grid.innerHTML = characters.map(c => `
-    <div class="char-card" data-id="${escHtml(c.id)}">
-      <div class="char-card-img-wrap">
-        ${c.refImage
-          ? `<img src="${escHtml(c.refImage)}" alt="${escHtml(c.name || '')}" />`
-          : `<div class="char-card-placeholder">${escHtml((c.name?.[0] || "?").toUpperCase())}</div>`}
+
+  // Sort by last edited (most recent first) for the top row
+  const recentlySorted = [...characters].sort((a, b) => {
+    const ta = a.updatedAt || a.id || "";
+    const tb = b.updatedAt || b.id || "";
+    return tb.localeCompare(ta);
+  });
+
+  // Group by fandom
+  const fandoms = {};
+  characters.forEach(c => {
+    const fandom = (c.fandom || "").trim() || "Uncategorized";
+    if (!fandoms[fandom]) fandoms[fandom] = [];
+    fandoms[fandom].push(c);
+  });
+
+  let html = "";
+
+  // Recently edited section
+  html += `
+    <section class="char-section">
+      <div class="char-section-header">
+        <h2 class="char-section-title">Recently Edited</h2>
+        <span class="char-section-count">${recentlySorted.length} character${recentlySorted.length !== 1 ? "s" : ""}</span>
       </div>
+      <div class="char-grid">
+        ${recentlySorted.map(c => renderCharCard(c)).join("")}
+      </div>
+    </section>
+  `;
+
+  // One section per fandom
+  Object.keys(fandoms).sort().forEach(fandom => {
+    const chars = fandoms[fandom];
+    html += `
+      <section class="char-section">
+        <div class="char-section-header">
+          <h2 class="char-section-title">${escHtml(fandom)}</h2>
+          <span class="char-section-count">${chars.length} character${chars.length !== 1 ? "s" : ""}</span>
+        </div>
+        <div class="char-grid">
+          ${chars.map(c => renderCharCard(c)).join("")}
+        </div>
+      </section>
+    `;
+  });
+
+  container.innerHTML = html;
+
+  // Attach events
+  container.querySelectorAll(".char-card-edit").forEach(btn =>
+    btn.addEventListener("click", () => openEditor(btn.dataset.id))
+  );
+  container.querySelectorAll(".char-card-delete").forEach(btn =>
+    btn.addEventListener("click", () => deleteCharacter(btn.dataset.id))
+  );
+}
+
+// CHANGE 8: Cards have 1:1 image; name + image are clickable links to character page
+function renderCharCard(c) {
+  // CHANGE 2: title image shown on card if available, otherwise fall back to refImage
+  const cardImg = c.titleImage || c.refImage;
+  return `
+    <div class="char-card" data-id="${escHtml(c.id)}">
+      <a href="character.html?id=${escHtml(c.id)}" class="char-card-img-link">
+        <div class="char-card-img-wrap">
+          ${cardImg
+            ? `<img src="${escHtml(cardImg)}" alt="${escHtml(c.name || '')}" />`
+            : `<div class="char-card-placeholder">${escHtml((c.name?.[0] || "?").toUpperCase())}</div>`}
+        </div>
+      </a>
       <div class="char-card-body">
-        <p class="char-card-name">${escHtml(c.name || "Unnamed")}</p>
+        <a href="character.html?id=${escHtml(c.id)}" class="char-card-name-link">
+          <p class="char-card-name">${escHtml(c.name || "Unnamed")}</p>
+        </a>
         <p class="char-card-fandom">${escHtml(c.fandom || "")}</p>
         <div class="char-card-actions">
-          <a href="character.html?id=${escHtml(c.id)}" class="char-card-btn">View</a>
           <button class="char-card-btn char-card-edit"   data-id="${escHtml(c.id)}">Edit</button>
           <button class="char-card-btn char-card-delete" data-id="${escHtml(c.id)}">Delete</button>
         </div>
       </div>
     </div>
-  `).join("");
-
-  grid.querySelectorAll(".char-card-edit").forEach(btn =>
-    btn.addEventListener("click", () => openEditor(btn.dataset.id))
-  );
-  grid.querySelectorAll(".char-card-delete").forEach(btn =>
-    btn.addEventListener("click", () => deleteCharacter(btn.dataset.id))
-  );
+  `;
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -478,17 +538,19 @@ function addGalleryRow(item) {
   tbody.appendChild(tr);
 }
 
+// CHANGE 1: Require name + fandom before saving
 async function handleFormSubmit(e) {
   e.preventDefault();
-  const name = val("ef-name");
-const fandom = val("ef-fandom");
 
-if (!name || !fandom) {
-  alert("You need both a Name and a Fandom before saving.");
-  return;
-}
+  const valField = function(id) { return (document.getElementById(id)?.value || "").trim(); };
 
-  const val = function(id) { return (document.getElementById(id)?.value || "").trim(); };
+  const name   = valField("ef-name");
+  const fandom = valField("ef-fandom");
+
+  if (!name || !fandom) {
+    alert("A Name and Fandom are both required before saving a character.");
+    return;
+  }
 
   const gallery = Array.from(document.querySelectorAll("#gallery-rows tr")).map(function(tr) {
     return {
@@ -498,29 +560,32 @@ if (!name || !fandom) {
     };
   }).filter(function(g) { return g.src; });
 
+  const now = new Date().toISOString();
+
   const character = {
     id:         editingId || generateId(),
-    name:       val("ef-name"),
-    fandom:     val("ef-fandom"),
-    nicknames:  val("ef-nicknames"),
-    pronouns:   val("ef-pronouns"),
-    age:        val("ef-age"),
-    birthday:   val("ef-birthday"),
-    heritage:   val("ef-heritage"),
-    occupation: val("ef-occupation"),
-    titleImage: val("ef-titleImage"),
-    refImage:   val("ef-refImage"),
-    appearance: val("ef-appearance"),
-    overview:   val("ef-overview"),
-    background: val("ef-background"),
-    history:    val("ef-history"),
+    updatedAt:  now,
+    name,
+    fandom,
+    nicknames:  valField("ef-nicknames"),
+    pronouns:   valField("ef-pronouns"),
+    age:        valField("ef-age"),
+    birthday:   valField("ef-birthday"),
+    heritage:   valField("ef-heritage"),
+    occupation: valField("ef-occupation"),
+    titleImage: valField("ef-titleImage"),
+    refImage:   valField("ef-refImage"),
+    appearance: valField("ef-appearance"),
+    overview:   valField("ef-overview"),
+    background: valField("ef-background"),
+    history:    valField("ef-history"),
     links: {
-      unvale:       val("ef-links_unvale"),
-      characterhub: val("ef-links_characterhub"),
-      artfight:     val("ef-links_artfight"),
-      spotify:      val("ef-links_spotify"),
+      unvale:       valField("ef-links_unvale"),
+      characterhub: valField("ef-links_characterhub"),
+      artfight:     valField("ef-links_artfight"),
+      spotify:      valField("ef-links_spotify"),
     },
-    gallery: gallery,
+    gallery,
   };
 
   const characters = getCharacters();
@@ -533,16 +598,16 @@ if (!name || !fandom) {
   }
 
   closeEditor();
-  const grid = document.getElementById("char-grid");
-  if (grid) renderCharacterGrid(grid);
+  const container = document.getElementById("char-sections-container");
+  if (container) renderIndexSections(container);
   await saveCharacters(characters);
 }
 
 async function deleteCharacter(id) {
   if (!confirm("Delete this character? This cannot be undone.")) return;
   const characters = getCharacters().filter(function(c) { return c.id !== id; });
-  const grid = document.getElementById("char-grid");
-  if (grid) renderCharacterGrid(grid);
+  const container = document.getElementById("char-sections-container");
+  if (container) renderIndexSections(container);
   await saveCharacters(characters);
 }
 

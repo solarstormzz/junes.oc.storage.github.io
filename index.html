@@ -15,19 +15,21 @@
 
   <nav>
     <a href="index.html" class="nav-logo">June's Character Storage</a>
-    <div class="search-wrap">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="11" cy="11" r="8"></circle>
-        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-      </svg>
-      <input class="search-input" type="search" placeholder="Search…" id="search-input" />
+    <div class="nav-right">
+      <div class="search-wrap">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input class="search-input" type="search" placeholder="Search…" id="search-input" />
+      </div>
+      <button id="nav-add-btn" class="nav-add-btn" title="New Character">＋</button>
+      <button id="nav-settings-btn" class="nav-settings-btn" title="GitHub Sync Settings">⚙</button>
+      <span id="sync-status" class="sync-status" title=""></span>
     </div>
-    <button id="nav-add-btn" class="nav-add-btn" title="New Character">＋</button>
-    <button id="nav-settings-btn" class="nav-settings-btn" title="GitHub Sync Settings">⚙</button>
-    <span id="sync-status" class="sync-status" title=""></span>
   </nav>
 
-  <!-- Sync banner — shown to users who haven't connected GitHub yet -->
+  <!-- Sync banner -->
   <div id="sync-banner" class="sync-banner" style="display:none">
     <span class="sync-banner-text">✦ Connect GitHub to save your characters across all devices</span>
     <div class="sync-banner-actions">
@@ -36,15 +38,12 @@
     </div>
   </div>
 
-  <section class="char-index-section">
-    <div class="char-index-header">
-      <h2 class="char-index-heading">Characters</h2>
-      <button id="add-char-btn" class="add-char-btn">+ New Character</button>
-    </div>
-    <div id="char-grid" class="char-grid">
+  <!-- CHANGE 5: Sections container — filled by JS with "Recently Edited" + per-fandom rows -->
+  <div class="char-index-wrap">
+    <div id="char-sections-container">
       <!-- Populated by script.js -->
     </div>
-  </section>
+  </div>
 
   <footer>
     <span class="footer-logo">June's Character Storage</span>
@@ -121,7 +120,21 @@
           </div>
           <div class="editor-row">
             <label>Occupation <input type="text" id="ef-occupation" /></label>
-            <label>Ref Image URL <input type="url" id="ef-refImage" placeholder="https://..." /></label>
+          </div>
+        </fieldset>
+
+        <!-- CHANGE 2: Main Images as its own fieldset with both ref + title image -->
+        <fieldset class="editor-fieldset">
+          <legend>Main Images</legend>
+          <div class="editor-row">
+            <label>Ref Image URL
+              <input type="url" id="ef-refImage" placeholder="https://…" />
+              <span class="editor-field-hint">Shown on the character page</span>
+            </label>
+            <label>Title Image URL
+              <input type="url" id="ef-titleImage" placeholder="https://…" />
+              <span class="editor-field-hint">Shown on the index card only</span>
+            </label>
           </div>
         </fieldset>
 
