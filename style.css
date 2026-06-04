@@ -1,4 +1,6 @@
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -186,16 +188,29 @@ nav {
   cursor: default;
 }
 
-.sync-status.sync-ok      { background: #6db87a; }
-.sync-status.sync-error   { background: #c97070; }
+.sync-status.sync-ok {
+  background: #6db87a;
+}
+
+.sync-status.sync-error {
+  background: #c97070;
+}
+
 .sync-status.sync-syncing {
   background: #a0b4c8;
   animation: pulse 1.2s ease-in-out infinite;
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.4; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.4;
+  }
 }
 
 /* ── SYNC BANNER ── */
@@ -452,15 +467,36 @@ footer {
 /* ── ANIMATION ── */
 
 @keyframes fadeUp {
-  from { opacity: 0; transform: translateY(14px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.char-section:nth-child(1) { animation-delay: 0.05s; }
-.char-section:nth-child(2) { animation-delay: 0.12s; }
-.char-section:nth-child(3) { animation-delay: 0.19s; }
-.char-section:nth-child(4) { animation-delay: 0.26s; }
-.char-section:nth-child(5) { animation-delay: 0.33s; }
+.char-section:nth-child(1) {
+  animation-delay: 0.05s;
+}
+
+.char-section:nth-child(2) {
+  animation-delay: 0.12s;
+}
+
+.char-section:nth-child(3) {
+  animation-delay: 0.19s;
+}
+
+.char-section:nth-child(4) {
+  animation-delay: 0.26s;
+}
+
+.char-section:nth-child(5) {
+  animation-delay: 0.33s;
+}
 
 /* ══════════════════════════════════════════
    CHARACTER PAGE NAV
@@ -715,7 +751,6 @@ footer {
   margin: 0;
 }
 
-/* CHANGE 5: Preserve user-entered line breaks and whitespace */
 .char-formatted {
   white-space: pre-wrap;
   word-break: break-word;
@@ -768,7 +803,6 @@ footer {
   border-bottom: 1px solid var(--border);
 }
 
-/* CHANGE 3: Background+History unified block styles */
 #char-bg-history-container {
   font-size: 0.83rem;
   line-height: 1.7;
@@ -1087,6 +1121,7 @@ footer {
   .char-sheet {
     flex-direction: column;
   }
+
   .char-basics {
     width: 100%;
   }
@@ -1141,7 +1176,8 @@ footer {
     gap: 0.5rem;
   }
 }
-  /* ══════════════════════════════════════════
+
+/* ══════════════════════════════════════════
    OVERVIEW TABS  (character.html)
 ══════════════════════════════════════════ */
 
@@ -1172,7 +1208,8 @@ footer {
   cursor: pointer;
   transition: color 0.18s, border-color 0.18s;
   white-space: nowrap;
-  margin-bottom: -1px; /* sit on top of the bar's border */
+  margin-bottom: -1px;
+  /* sit on top of the bar's border */
 }
 
 .overview-tab:hover {
@@ -1241,7 +1278,7 @@ footer {
 
 .rel-card:hover {
   border-color: #c5bfb6;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
 }
 
 .rel-card-header {
@@ -1382,7 +1419,9 @@ footer {
   transition: color 0.15s;
 }
 
-.rel-details summary::-webkit-details-marker { display: none; }
+.rel-details summary::-webkit-details-marker {
+  display: none;
+}
 
 .rel-details summary::before {
   content: '▸';
@@ -1395,7 +1434,9 @@ footer {
   transform: rotate(90deg);
 }
 
-.rel-details summary:hover { color: var(--ink-mid); }
+.rel-details summary:hover {
+  color: var(--ink-mid);
+}
 
 .rel-details[open] {
   display: block;
@@ -1431,7 +1472,9 @@ footer {
   transition: background 0.15s;
 }
 
-.rel-empty-add-btn:hover { background: var(--surface); }
+.rel-empty-add-btn:hover {
+  background: var(--surface);
+}
 
 /* ══════════════════════════════════════════
    RELATIONSHIP EDITOR MODAL
@@ -1482,12 +1525,34 @@ footer {
   border-bottom: none;
 }
 
-.rel-editor-cell--name    { width: 14%; min-width: 90px; }
-.rel-editor-cell--type    { width: 17%; min-width: 110px; }
-.rel-editor-cell--canon   { width: 13%; min-width: 110px; }
-.rel-editor-cell--link    { width: 18%; min-width: 120px; }
-.rel-editor-cell--desc    { width: 33%; }
-.rel-editor-cell--rm      { width: 36px; text-align: center; }
+.rel-editor-cell--name {
+  width: 14%;
+  min-width: 90px;
+}
+
+.rel-editor-cell--type {
+  width: 17%;
+  min-width: 110px;
+}
+
+.rel-editor-cell--canon {
+  width: 13%;
+  min-width: 110px;
+}
+
+.rel-editor-cell--link {
+  width: 18%;
+  min-width: 120px;
+}
+
+.rel-editor-cell--desc {
+  width: 33%;
+}
+
+.rel-editor-cell--rm {
+  width: 36px;
+  text-align: center;
+}
 
 .rel-editor-table input[type="text"],
 .rel-editor-table input[type="url"],
@@ -1531,4 +1596,62 @@ footer {
 .rm-rel-row:hover {
   color: #a05050;
   background: #f5e8e8;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   ADD THESE RULES TO THE BOTTOM OF style.css
+══════════════════════════════════════════════════════════════════ */
+
+/* ── Background/history collapse button ── */
+.char-bg-collapse-btn {
+  display: block;
+  margin-top: 0.85rem;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--ink-light);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.25rem 0.75rem;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.char-bg-collapse-btn:hover {
+  color: var(--ink-mid);
+  border-color: #b5afa6;
+  background: var(--surface);
+}
+
+/* ── Gallery shared/tagged image label ── */
+.gallery-meta-right {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.gallery-shared-tag {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--ink-light);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 0.1rem 0.5rem;
+  white-space: nowrap;
+}
+
+.gallery-year {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--ink-light);
+  white-space: nowrap;
+  flex-shrink: 0;
 }

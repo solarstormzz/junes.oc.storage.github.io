@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,17 +8,21 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600&family=DM+Sans:wght@300;400;500&display=swap"
+    rel="stylesheet" />
 
   <link rel="stylesheet" href="style.css" />
 </head>
+
 <body>
 
   <nav>
     <a href="index.html" class="nav-logo">June's Character Storage</a>
     <div class="nav-right">
       <div class="search-wrap">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
           <circle cx="11" cy="11" r="8"></circle>
           <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
         </svg>
@@ -76,10 +81,18 @@
             style="font-family:'DM Sans',sans-serif;font-size:.85rem;padding:.4rem .65rem;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--ink);width:100%;outline:none" />
         </div>
         <p style="font-size:.75rem;color:var(--ink-light);line-height:1.6">
-          Generate a token at <strong>GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)</strong> with only the <code style="background:var(--surface);padding:.1rem .3rem;border-radius:3px">gist</code> scope ticked.<br/><br/>
-          Create your Gist at <strong>gist.github.com</strong> — add a file called <code style="background:var(--surface);padding:.1rem .3rem;border-radius:3px">characters.json</code> containing <code style="background:var(--surface);padding:.1rem .3rem;border-radius:3px">[]</code>, set it to Secret, and copy the ID from the URL.
+          Generate a token at <strong>GitHub → Settings → Developer settings → Personal access tokens → Tokens
+            (classic)</strong> with only the <code
+            style="background:var(--surface);padding:.1rem .3rem;border-radius:3px">gist</code> scope
+          ticked.<br /><br />
+          Create your Gist at <strong>gist.github.com</strong> — add a file called <code
+            style="background:var(--surface);padding:.1rem .3rem;border-radius:3px">characters.json</code> containing
+          <code style="background:var(--surface);padding:.1rem .3rem;border-radius:3px">[]</code>, set it to Secret, and
+          copy the ID from the URL.
         </p>
-        <div id="setup-error" style="display:none;font-size:.8rem;color:#a05050;padding:.5rem .75rem;background:#f5e8e8;border-radius:4px"></div>
+        <div id="setup-error"
+          style="display:none;font-size:.8rem;color:#a05050;padding:.5rem .75rem;background:#f5e8e8;border-radius:4px">
+        </div>
         <div style="display:flex;justify-content:space-between;align-items:center;gap:.75rem;padding-top:.25rem">
           <button id="setup-clear" class="editor-btn-cancel" style="font-size:.75rem;padding:.35rem .9rem">
             Disconnect
@@ -152,7 +165,8 @@
             <textarea id="ef-overview" rows="3" placeholder="Short summary shown at the top of the page..."></textarea>
           </label>
           <label class="editor-label-full">Background &amp; History
-            <textarea id="ef-background" rows="7" placeholder="Write the full background and history here. A 'read more' will automatically appear after the first ~500 characters."></textarea>
+            <textarea id="ef-background" rows="7"
+              placeholder="Write the full background and history here. A 'read more' will automatically appear after the first ~500 characters."></textarea>
           </label>
         </fieldset>
 
@@ -160,12 +174,12 @@
         <fieldset class="editor-fieldset">
           <legend>Links</legend>
           <div class="editor-row">
-            <label>Unvale URL        <input type="url" id="ef-links_unvale"       placeholder="https://..." /></label>
-            <label>CharacterHub URL  <input type="url" id="ef-links_characterhub" placeholder="https://..." /></label>
+            <label>Unvale URL <input type="url" id="ef-links_unvale" placeholder="https://..." /></label>
+            <label>CharacterHub URL <input type="url" id="ef-links_characterhub" placeholder="https://..." /></label>
           </div>
           <div class="editor-row">
-            <label>Artfight URL      <input type="url" id="ef-links_artfight"     placeholder="https://..." /></label>
-            <label>Spotify Playlist  <input type="url" id="ef-links_spotify"      placeholder="https://..." /></label>
+            <label>Artfight URL <input type="url" id="ef-links_artfight" placeholder="https://..." /></label>
+            <label>Spotify Playlist <input type="url" id="ef-links_spotify" placeholder="https://..." /></label>
           </div>
         </fieldset>
 
@@ -177,6 +191,7 @@
               <tr>
                 <th>Image URL</th>
                 <th>Caption</th>
+                <th>Characters tagged</th>
                 <th>Year</th>
                 <th></th>
               </tr>
@@ -199,4 +214,5 @@
 
   <script src="script.js"></script>
 </body>
+
 </html>

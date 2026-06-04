@@ -2,15 +2,15 @@
 // GITHUB GIST SYNC
 // ══════════════════════════════════════════════════════════════════════
 
-const STORAGE_TOKEN  = "oc_gh_token";
-const STORAGE_GIST   = "oc_gh_gist";
-const STORAGE_LOCAL  = "oc_characters";
-const GIST_FILENAME  = "characters.json";
+const STORAGE_TOKEN = "oc_gh_token";
+const STORAGE_GIST = "oc_gh_gist";
+const STORAGE_LOCAL = "oc_characters";
+const GIST_FILENAME = "characters.json";
 
 function getCreds() {
   return {
-    token:  localStorage.getItem(STORAGE_TOKEN)  || "",
-    gistId: localStorage.getItem(STORAGE_GIST)   || "",
+    token: localStorage.getItem(STORAGE_TOKEN) || "",
+    gistId: localStorage.getItem(STORAGE_GIST) || "",
   };
 }
 
@@ -31,7 +31,7 @@ async function gistGet() {
   });
   if (!res.ok) throw new Error(`GitHub ${res.status}: ${res.statusText}`);
   const data = await res.json();
-  const raw  = data.files?.[GIST_FILENAME]?.content;
+  const raw = data.files?.[GIST_FILENAME]?.content;
   if (!raw) throw new Error(`File "${GIST_FILENAME}" not found in Gist.`);
   return JSON.parse(raw);
 }
@@ -61,9 +61,9 @@ function setStatus(state, message) {
   if (!el) return;
   el.className = "sync-status";
   if (state === "syncing") { el.classList.add("sync-syncing"); el.title = "Syncing with GitHub…"; }
-  if (state === "ok")      { el.classList.add("sync-ok");      el.title = message || "Synced with GitHub"; }
-  if (state === "error")   { el.classList.add("sync-error");   el.title = message || "Sync failed — hover for details"; }
-  if (state === "off")     { el.title = "Not connected to GitHub"; }
+  if (state === "ok") { el.classList.add("sync-ok"); el.title = message || "Synced with GitHub"; }
+  if (state === "error") { el.classList.add("sync-error"); el.title = message || "Sync failed — hover for details"; }
+  if (state === "off") { el.title = "Not connected to GitHub"; }
 }
 
 // ── Character read / write ────────────────────────────────────────────
@@ -121,9 +121,9 @@ function openSetup() {
   if (!overlay) return;
   const { token, gistId } = getCreds();
   const tokenEl = document.getElementById("setup-token");
-  const gistEl  = document.getElementById("setup-gist");
+  const gistEl = document.getElementById("setup-gist");
   if (tokenEl) tokenEl.value = token;
-  if (gistEl)  gistEl.value  = gistId;
+  if (gistEl) gistEl.value = gistId;
   clearSetupError();
   overlay.classList.add("open");
   document.body.style.overflow = "hidden";
@@ -147,11 +147,11 @@ function clearSetupError() {
 }
 
 async function handleSetupSave() {
-  const token  = document.getElementById("setup-token")?.value.trim();
+  const token = document.getElementById("setup-token")?.value.trim();
   const gistId = document.getElementById("setup-gist")?.value.trim();
   clearSetupError();
 
-  if (!token)  { showSetupError("Please enter your Personal Access Token."); return; }
+  if (!token) { showSetupError("Please enter your Personal Access Token."); return; }
   if (!gistId) { showSetupError("Please enter your Gist ID."); return; }
 
   const btn = document.getElementById("setup-save");
@@ -163,14 +163,14 @@ async function handleSetupSave() {
     });
     if (res.status === 401) throw new Error("Invalid token — check it hasn't expired and has the gist scope.");
     if (res.status === 404) throw new Error("Gist not found — double-check the ID from the URL.");
-    if (!res.ok)            throw new Error(`GitHub error ${res.status}: ${res.statusText}`);
+    if (!res.ok) throw new Error(`GitHub error ${res.status}: ${res.statusText}`);
     const data = await res.json();
     if (!data.files?.[GIST_FILENAME]) {
       throw new Error(`No file named "${GIST_FILENAME}" in that Gist. Make sure the filename is exactly characters.json`);
     }
 
     localStorage.setItem(STORAGE_TOKEN, token);
-    localStorage.setItem(STORAGE_GIST,  gistId);
+    localStorage.setItem(STORAGE_GIST, gistId);
     closeSetup();
 
     await loadFromGist();
@@ -213,9 +213,9 @@ function updateSettingsBtnStyle() {
 function loadCharacterPage() {
   if (!document.getElementById("char-name")) return;
 
-  const id         = new URLSearchParams(window.location.search).get("id");
+  const id = new URLSearchParams(window.location.search).get("id");
   const characters = getCharacters();
-  const character  = characters.find(c => c.id === id);
+  const character = characters.find(c => c.id === id);
 
   if (!character) {
     const sheet = document.querySelector(".char-sheet");
@@ -223,27 +223,27 @@ function loadCharacterPage() {
     return;
   }
 
-  setText("char-name",       character.name);
-  setText("char-fandom",     character.fandom);
-  setText("char-nicknames",  character.nicknames);
-  setText("char-pronouns",   character.pronouns);
-  setText("char-age",        character.age);
-  setText("char-birthday",   character.birthday);
-  setText("char-heritage",   character.heritage);
+  setText("char-name", character.name);
+  setText("char-fandom", character.fandom);
+  setText("char-nicknames", character.nicknames);
+  setText("char-pronouns", character.pronouns);
+  setText("char-age", character.age);
+  setText("char-birthday", character.birthday);
+  setText("char-heritage", character.heritage);
   setText("char-occupation", character.occupation);
   setFormattedText("char-appearance", character.appearance);
 
-  setLink("char-unvale",       "char-unvale-li",       character.links?.unvale,       "Unvale");
+  setLink("char-unvale", "char-unvale-li", character.links?.unvale, "Unvale");
   setLink("char-characterhub", "char-characterhub-li", character.links?.characterhub, "CharacterHub");
-  setLink("char-artfight",     "char-artfight-li",     character.links?.artfight,     "Artfight");
-  setLink("char-spotify",      "char-spotify-li",      character.links?.spotify,      "Playlist");
+  setLink("char-artfight", "char-artfight-li", character.links?.artfight, "Artfight");
+  setLink("char-spotify", "char-spotify-li", character.links?.spotify, "Playlist");
 
   renderBackgroundHistory(character.background, character.history);
   setFormattedText("char-overview", character.overview);
 
   // Ref image
   const refWrap = document.querySelector(".char-ref-wrap");
-  const img     = document.querySelector(".char-ref");
+  const img = document.querySelector(".char-ref");
   if (character.refImage && refWrap && img) {
     img.src = character.refImage;
     refWrap.style.display = "block";
@@ -259,7 +259,7 @@ function loadCharacterPage() {
     titleImg.style.display = "none";
   }
 
-  renderGallery(character.gallery || []);
+  renderGallery(character.gallery || [], id);
   document.title = (character.name || "Character") + " — Character Sheet";
 
   // Overview / Relationships tab switching
@@ -268,7 +268,7 @@ function loadCharacterPage() {
   // Render relationships tab
   renderRelationships(character.relationships || [], id);
 
-  // Edit button (main character editor — redirects to index)
+  // Edit button 
   const editBtn = document.getElementById("char-page-edit-btn");
   if (editBtn) {
     editBtn.addEventListener("click", () => {
@@ -276,7 +276,7 @@ function loadCharacterPage() {
     });
   }
 
-  // Edit relationships button — opens inline relationship editor
+  // Edit relationships button 
   const editRelBtn = document.getElementById("edit-relationships-btn");
   if (editRelBtn) {
     editRelBtn.addEventListener("click", () => openRelationshipEditor(id));
@@ -287,14 +287,13 @@ function loadCharacterPage() {
 
 function initOverviewTabs() {
   const overviewTab = document.getElementById("tab-overview");
-  const relTab      = document.getElementById("tab-relationships");
+  const relTab = document.getElementById("tab-relationships");
   const overviewPanel = document.getElementById("panel-overview");
-  const relPanel      = document.getElementById("panel-relationships");
-  const editRelBtn    = document.getElementById("edit-relationships-btn");
+  const relPanel = document.getElementById("panel-relationships");
+  const editRelBtn = document.getElementById("edit-relationships-btn");
 
   if (!overviewTab || !relTab) return;
 
-  // Hide edit button on overview tab by default
   if (editRelBtn) editRelBtn.style.display = "none";
 
   overviewTab.addEventListener("click", () => {
@@ -364,7 +363,7 @@ function renderRelationships(relationships, currentId) {
       let cut = REL_TRUNCATE;
       while (cut < desc.length && desc[cut] !== " " && desc[cut] !== "\n") cut++;
       const visible = desc.slice(0, cut).trimEnd();
-      const hidden  = desc.slice(cut).trimStart();
+      const hidden = desc.slice(cut).trimStart();
       descHtml = `
         <div class="rel-desc-block">
           <span class="rel-desc char-formatted">${escHtml(visible)}</span><span class="rel-ellipsis">…</span>
@@ -421,7 +420,7 @@ function openRelationshipEditor(charId) {
 
   relEditingCharId = charId;
   const characters = getCharacters();
-  const character  = characters.find(c => c.id === charId);
+  const character = characters.find(c => c.id === charId);
 
   const tbody = document.getElementById("rel-editor-rows");
   if (tbody) {
@@ -455,9 +454,9 @@ function addRelRow(rel) {
     </td>
    <td class="rel-editor-cell rel-editor-cell--canon">
       <select class="rel-r-canon">
-        <option value=""         ${!rel.canon                    ? "selected" : ""}>—</option>
-        <option value="canon"    ${rel.canon === "canon"         ? "selected" : ""}>Canon character</option>
-        <option value="noncanon" ${rel.canon === "noncanon"      ? "selected" : ""}>OC</option>
+        <option value=""         ${!rel.canon ? "selected" : ""}>—</option>
+        <option value="canon"    ${rel.canon === "canon" ? "selected" : ""}>Canon character</option>
+        <option value="noncanon" ${rel.canon === "noncanon" ? "selected" : ""}>OC</option>
       </select>
     </td>
     <td class="rel-editor-cell rel-editor-cell--link">
@@ -480,11 +479,11 @@ async function handleRelFormSubmit(e) {
 
   const rows = Array.from(document.querySelectorAll("#rel-editor-rows .rel-editor-row"));
   const relationships = rows.map(tr => ({
-    name:        (tr.querySelector(".rel-r-name")?.value  || "").trim(),
-    type:        (tr.querySelector(".rel-r-type")?.value  || "").trim(),
-    canon:       (tr.querySelector(".rel-r-canon")?.value || ""),
-    link:        (tr.querySelector(".rel-r-link")?.value  || "").trim(),
-    description: (tr.querySelector(".rel-r-desc")?.value  || "").trim(),
+    name: (tr.querySelector(".rel-r-name")?.value || "").trim(),
+    type: (tr.querySelector(".rel-r-type")?.value || "").trim(),
+    canon: (tr.querySelector(".rel-r-canon")?.value || ""),
+    link: (tr.querySelector(".rel-r-link")?.value || "").trim(),
+    description: (tr.querySelector(".rel-r-desc")?.value || "").trim(),
   })).filter(r => r.name);
 
   const characters = getCharacters();
@@ -504,7 +503,25 @@ async function handleRelFormSubmit(e) {
 
 // ── Helper functions used by character page ───────────────────────────
 
-const TRUNCATE_CHARS = 500;
+const TRUNCATE_CHARS = 2000;
+
+// Sentence-boundary search: finds the end of the last complete sentence
+// at or before `limit`. Looks for . ! ? followed by whitespace or end-of-string.
+function findSentenceBoundary(text, limit) {
+  const sentenceEnd = /[.!?]/;
+  for (let i = Math.min(limit, text.length - 1); i >= limit * 0.5; i--) {
+    if (sentenceEnd.test(text[i])) {
+      const rest = text.slice(i + 1).trimStart();
+      if (!rest || /^[A-Z"'«\u2018\u201C]/.test(rest) || rest[0] === "\n") {
+        return i + 1;
+      }
+    }
+  }
+  // Fallback: snap to word boundary
+  let cut = limit;
+  while (cut < text.length && text[cut] !== " " && text[cut] !== "\n") cut++;
+  return cut;
+}
 
 function renderBackgroundHistory(background, history) {
   const container = document.getElementById("char-bg-history-container");
@@ -525,27 +542,36 @@ function renderBackgroundHistory(background, history) {
     return;
   }
 
-  let cutoff = TRUNCATE_CHARS;
-  while (cutoff < fullText.length && fullText[cutoff] !== " " && fullText[cutoff] !== "\n") cutoff++;
-
+  const cutoff = findSentenceBoundary(fullText, TRUNCATE_CHARS);
   const visible = fullText.slice(0, cutoff).trimEnd();
-  const hidden  = fullText.slice(cutoff).trimStart();
+  const hidden = fullText.slice(cutoff).trimStart();
 
   container.innerHTML = `
     <div class="char-bg-history-block">
-      <span class="char-body char-formatted" id="char-bg-visible">${escHtml(visible)}</span><span class="char-bg-ellipsis">…</span>
+      <span class="char-body char-formatted" id="char-bg-visible">${escHtml(visible)}</span>
+      <span class="char-bg-ellipsis"> …</span>
       <details class="char-details char-bg-details">
         <summary>click here to read more</summary>
         <span class="char-body char-formatted" id="char-bg-hidden">${escHtml(hidden)}</span>
+        <button type="button" class="char-bg-collapse-btn">▴ collapse</button>
       </details>
     </div>
   `;
 
-  const details  = container.querySelector(".char-bg-details");
+  const details = container.querySelector(".char-bg-details");
   const ellipsis = container.querySelector(".char-bg-ellipsis");
+  const collapseBtn = container.querySelector(".char-bg-collapse-btn");
+
   if (details && ellipsis) {
     details.addEventListener("toggle", () => {
       ellipsis.style.display = details.open ? "none" : "inline";
+    });
+  }
+
+  if (collapseBtn && details) {
+    collapseBtn.addEventListener("click", () => {
+      details.open = false;
+      container.scrollIntoView({ behavior: "smooth", block: "nearest" });
     });
   }
 }
@@ -564,10 +590,10 @@ function setFormattedText(id, value) {
 
 function setLink(anchorId, liId, href, label) {
   const anchor = document.getElementById(anchorId);
-  const li     = document.getElementById(liId);
+  const li = document.getElementById(liId);
   if (!anchor) return;
   if (href) {
-    anchor.href        = href;
+    anchor.href = href;
     anchor.textContent = label;
     if (li) li.style.display = "";
   } else {
@@ -575,21 +601,49 @@ function setLink(anchorId, liId, href, label) {
   }
 }
 
-function renderGallery(gallery) {
+// ── Gallery rendering 
+
+function renderGallery(ownGallery, currentCharId) {
   const grid = document.querySelector(".gallery-grid");
   if (!grid) return;
-  if (!gallery.length) {
+
+  // Collect all tagged images from other characters where this char is mentioned
+  const allChars = getCharacters();
+  const currentChar = allChars.find(c => c.id === currentCharId);
+  const currentName = (currentChar?.name || "").toLowerCase().trim();
+
+  const taggedImages = [];
+  allChars.forEach(c => {
+    if (c.id === currentCharId) return;
+    (c.gallery || []).forEach(item => {
+      const tags = (item.characters || "")
+        .split(",")
+        .map(t => t.trim().toLowerCase())
+        .filter(Boolean);
+      if (currentName && tags.includes(currentName)) {
+        taggedImages.push({ ...item, _fromChar: c.name });
+      }
+    });
+  });
+
+  const combined = [...ownGallery, ...taggedImages];
+
+  if (!combined.length) {
     grid.innerHTML = "<p style='padding:1rem;opacity:.5;font-style:italic'>No gallery images yet.</p>";
     return;
   }
-  grid.innerHTML = gallery.map(item => `
+
+  grid.innerHTML = combined.map(item => `
     <div class="gallery-item">
       <div class="gallery-img-wrap">
         <img src="${escHtml(item.src)}" alt="${escHtml(item.caption || '')}" loading="lazy" />
       </div>
       <div class="gallery-meta">
         <span class="gallery-caption">${escHtml(item.caption || "")}</span>
-        ${item.year ? `<span class="gallery-year">${escHtml(item.year)}</span>` : ""}
+        <div class="gallery-meta-right">
+          ${item._fromChar ? `<span class="gallery-shared-tag" title="Uploaded to ${escHtml(item._fromChar)}'s gallery">w/ ${escHtml(item._fromChar)}</span>` : ""}
+          ${item.year ? `<span class="gallery-year">${escHtml(item.year)}</span>` : ""}
+        </div>
       </div>
     </div>
   `).join("");
@@ -689,7 +743,7 @@ function renderIndexSections(container, filter) {
 
   if (filter) {
     characters = characters.filter(c =>
-      (c.name   || "").toLowerCase().includes(filter) ||
+      (c.name || "").toLowerCase().includes(filter) ||
       (c.fandom || "").toLowerCase().includes(filter)
     );
   }
@@ -762,8 +816,8 @@ function renderCharCard(c) {
       <a href="character.html?id=${escHtml(c.id)}" class="char-card-img-link">
         <div class="char-card-img-wrap">
           ${cardImg
-            ? `<img src="${escHtml(cardImg)}" alt="${escHtml(c.name || '')}" />`
-            : `<div class="char-card-placeholder">${escHtml((c.name?.[0] || "?").toUpperCase())}</div>`}
+      ? `<img src="${escHtml(cardImg)}" alt="${escHtml(c.name || '')}" />`
+      : `<div class="char-card-placeholder">${escHtml((c.name?.[0] || "?").toUpperCase())}</div>`}
         </div>
       </a>
       <div class="char-card-body">
@@ -794,10 +848,10 @@ function openEditor(id) {
   const c = id ? getCharacters().find(x => x.id === id) : null;
 
   const fields = [
-    "name","fandom","nicknames","pronouns","age","birthday",
-    "heritage","occupation","refImage","titleImage","appearance","overview",
+    "name", "fandom", "nicknames", "pronouns", "age", "birthday",
+    "heritage", "occupation", "refImage", "titleImage", "appearance", "overview",
     "background",
-    "links.unvale","links.characterhub","links.artfight","links.spotify"
+    "links.unvale", "links.characterhub", "links.artfight", "links.spotify"
   ];
 
   if (c?.history && !c.background?.includes(c.history)) {
@@ -838,21 +892,22 @@ function addGalleryRow(item) {
   if (!tbody) return;
   const tr = document.createElement("tr");
   tr.innerHTML = `
-    <td><input type="text" class="g-src"     placeholder="Image URL" value="${escHtml(item.src || "")}" /></td>
-    <td><input type="text" class="g-caption" placeholder="Caption"   value="${escHtml(item.caption || "")}" /></td>
-    <td><input type="text" class="g-year"    placeholder="Year"      value="${escHtml(item.year || "")}" style="width:70px" /></td>
+    <td><input type="text" class="g-src"        placeholder="Image URL"                     value="${escHtml(item.src || "")}" /></td>
+    <td><input type="text" class="g-caption"    placeholder="Caption"                       value="${escHtml(item.caption || "")}" /></td>
+    <td><input type="text" class="g-characters" placeholder="Names, comma-separated"        value="${escHtml(item.characters || "")}" /></td>
+    <td><input type="text" class="g-year"       placeholder="Year"                          value="${escHtml(item.year || "")}" style="width:70px" /></td>
     <td><button type="button" class="rm-gallery-row">✕</button></td>
   `;
-  tr.querySelector(".rm-gallery-row").addEventListener("click", function() { tr.remove(); });
+  tr.querySelector(".rm-gallery-row").addEventListener("click", function () { tr.remove(); });
   tbody.appendChild(tr);
 }
 
 async function handleFormSubmit(e) {
   e.preventDefault();
 
-  const valField = function(id) { return (document.getElementById(id)?.value || "").trim(); };
+  const valField = function (id) { return (document.getElementById(id)?.value || "").trim(); };
 
-  const name   = valField("ef-name");
+  const name = valField("ef-name");
   const fandom = valField("ef-fandom");
 
   if (!name || !fandom) {
@@ -860,13 +915,14 @@ async function handleFormSubmit(e) {
     return;
   }
 
-  const gallery = Array.from(document.querySelectorAll("#gallery-rows tr")).map(function(tr) {
+  const gallery = Array.from(document.querySelectorAll("#gallery-rows tr")).map(function (tr) {
     return {
-      src:     (tr.querySelector(".g-src")?.value     || "").trim(),
+      src: (tr.querySelector(".g-src")?.value || "").trim(),
       caption: (tr.querySelector(".g-caption")?.value || "").trim(),
-      year:    (tr.querySelector(".g-year")?.value    || "").trim(),
+      characters: (tr.querySelector(".g-characters")?.value || "").trim(),
+      year: (tr.querySelector(".g-year")?.value || "").trim(),
     };
-  }).filter(function(g) { return g.src; });
+  }).filter(function (g) { return g.src; });
 
   const now = new Date().toISOString();
 
@@ -874,35 +930,35 @@ async function handleFormSubmit(e) {
   const existingChar = editingId ? getCharacters().find(c => c.id === editingId) : null;
 
   const character = {
-    id:            editingId || generateId(),
-    updatedAt:     now,
+    id: editingId || generateId(),
+    updatedAt: now,
     name,
     fandom,
-    nicknames:     valField("ef-nicknames"),
-    pronouns:      valField("ef-pronouns"),
-    age:           valField("ef-age"),
-    birthday:      valField("ef-birthday"),
-    heritage:      valField("ef-heritage"),
-    occupation:    valField("ef-occupation"),
-    titleImage:    valField("ef-titleImage"),
-    refImage:      valField("ef-refImage"),
-    appearance:    valField("ef-appearance"),
-    overview:      valField("ef-overview"),
-    background:    valField("ef-background"),
-    history:       "",
+    nicknames: valField("ef-nicknames"),
+    pronouns: valField("ef-pronouns"),
+    age: valField("ef-age"),
+    birthday: valField("ef-birthday"),
+    heritage: valField("ef-heritage"),
+    occupation: valField("ef-occupation"),
+    titleImage: valField("ef-titleImage"),
+    refImage: valField("ef-refImage"),
+    appearance: valField("ef-appearance"),
+    overview: valField("ef-overview"),
+    background: valField("ef-background"),
+    history: "",
     relationships: existingChar?.relationships || [],
     links: {
-      unvale:       valField("ef-links_unvale"),
+      unvale: valField("ef-links_unvale"),
       characterhub: valField("ef-links_characterhub"),
-      artfight:     valField("ef-links_artfight"),
-      spotify:      valField("ef-links_spotify"),
+      artfight: valField("ef-links_artfight"),
+      spotify: valField("ef-links_spotify"),
     },
     gallery,
   };
 
   const characters = getCharacters();
   if (editingId) {
-    const idx = characters.findIndex(function(c) { return c.id === editingId; });
+    const idx = characters.findIndex(function (c) { return c.id === editingId; });
     if (idx !== -1) characters[idx] = character;
     else characters.push(character);
   } else {
@@ -917,7 +973,7 @@ async function handleFormSubmit(e) {
 
 async function deleteCharacter(id) {
   if (!confirm("Delete this character? This cannot be undone.")) return;
-  const characters = getCharacters().filter(function(c) { return c.id !== id; });
+  const characters = getCharacters().filter(function (c) { return c.id !== id; });
   const container = document.getElementById("char-sections-container");
   if (container) renderIndexSections(container);
   await saveCharacters(characters);
@@ -927,7 +983,7 @@ async function deleteCharacter(id) {
 // INIT
 // ══════════════════════════════════════════════════════════════════════
 
-document.addEventListener("DOMContentLoaded", function() {
+document.addEventListener("DOMContentLoaded", function () {
   loadIndexPage();
   loadCharacterPage();
 
