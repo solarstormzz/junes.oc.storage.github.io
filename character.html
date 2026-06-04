@@ -18,7 +18,6 @@
     }
 
     /* ── REF IMAGE: 5:4 ratio, full image always visible ── */
-    /* CHANGE 3 */
     .char-sheet:has(.char-ref-wrap[style*="block"]) {
       display: grid;
       grid-template-columns: 280px auto;
@@ -38,7 +37,6 @@
       border-radius: 8px;
       overflow: hidden;
       align-self: start;
-      /* 5:4 ratio container */
       aspect-ratio: 5 / 4;
       width: 100%;
       display: none;
@@ -47,13 +45,11 @@
       background: var(--surface);
     }
 
-    /* Override display:none when shown by JS */
     .char-ref-wrap[style*="block"] {
       display: flex !important;
     }
 
     .char-ref {
-      /* CHANGE 3: object-fit contain so the full image is always visible within 5:4 box */
       display: block;
       width: 100%;
       height: 100%;
@@ -82,6 +78,58 @@
         width: 100%;
       }
     }
+
+    /* CHANGE 4: Edit button in nav */
+    .char-nav-edit-btn {
+      display: inline-flex;
+      align-items: center;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.82rem;
+      color: var(--ink-mid);
+      text-decoration: none;
+      padding: 0.3rem 0.85rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: transparent;
+      transition: color 0.2s, border-color 0.2s, background 0.2s;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .char-nav-edit-btn:hover {
+      color: var(--ink);
+      border-color: #b5afa6;
+      background: var(--surface);
+    }
+
+    /* CHANGE 3: unified background+history block */
+    .char-bg-history-block {
+      display: block;
+    }
+
+    .char-bg-details {
+      display: inline;
+    }
+
+    .char-bg-details summary {
+      display: inline-flex;
+      margin-top: 8px;
+    }
+
+    .char-bg-details[open] {
+      display: block;
+    }
+
+    .char-bg-details[open] p,
+    .char-bg-details[open] span {
+      display: block;
+      margin-top: 6px;
+    }
+
+    .char-bg-ellipsis {
+      font-size: 0.83rem;
+      color: var(--ink);
+    }
   </style>
 </head>
 <body>
@@ -90,6 +138,8 @@
 <nav class="char-nav">
   <a href="index.html" class="char-nav-back">Back</a>
   <div class="char-nav-tabs">
+    <!-- CHANGE 4: Edit button -->
+    <button id="char-page-edit-btn" class="char-nav-edit-btn">Edit</button>
     <a href="#info" class="char-nav-tab active">Info</a>
     <a href="#gallery" class="char-nav-tab">Gallery</a>
   </div>
@@ -138,6 +188,7 @@
       </table>
 
       <h2 class="char-section-heading">Appearance</h2>
+      <!-- CHANGE 5: char-formatted class added by JS for pre-wrap -->
       <p class="char-body" id="char-appearance"></p>
 
       <h2 class="char-section-heading">Links</h2>
@@ -154,15 +205,12 @@
     <main class="char-overview">
 
       <h2 class="char-overview-heading">Overview</h2>
+      <!-- CHANGE 5: char-formatted class added by JS -->
       <p class="char-body" style="margin-bottom: 20px;" id="char-overview"></p>
 
+      <!-- CHANGE 3: Unified background + history block; populated by renderBackgroundHistory() -->
       <h2 class="char-overview-subheading">Background &amp; History</h2>
-      <p class="char-body" style="margin-bottom: 12px;" id="char-background"></p>
-
-      <details class="char-details">
-        <summary>click here to read more</summary>
-        <p id="char-history"></p>
-      </details>
+      <div id="char-bg-history-container"></div>
 
     </main>
 

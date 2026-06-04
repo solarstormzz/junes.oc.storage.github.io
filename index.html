@@ -38,7 +38,6 @@
     </div>
   </div>
 
-  <!-- CHANGE 5: Sections container — filled by JS with "Recently Edited" + per-fandom rows -->
   <div class="char-index-wrap">
     <div id="char-sections-container">
       <!-- Populated by script.js -->
@@ -123,7 +122,7 @@
           </div>
         </fieldset>
 
-        <!-- CHANGE 2: Main Images as its own fieldset with both ref + title image -->
+        <!-- ── Main Images ── -->
         <fieldset class="editor-fieldset">
           <legend>Main Images</legend>
           <div class="editor-row">
@@ -152,11 +151,8 @@
           <label class="editor-label-full">Overview
             <textarea id="ef-overview" rows="3" placeholder="Short summary shown at the top of the page..."></textarea>
           </label>
-          <label class="editor-label-full">Background (visible)
-            <textarea id="ef-background" rows="3" placeholder="First paragraph of history, always visible..."></textarea>
-          </label>
-          <label class="editor-label-full">History (hidden under spoiler)
-            <textarea id="ef-history" rows="4" placeholder="Continues under 'click here to read more'..."></textarea>
+          <label class="editor-label-full">Background &amp; History
+            <textarea id="ef-background" rows="7" placeholder="Write the full background and history here. A 'read more' will automatically appear after the first ~500 characters."></textarea>
           </label>
         </fieldset>
 

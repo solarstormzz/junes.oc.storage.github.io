@@ -174,7 +174,7 @@ async function handleSetupSave() {
     closeSetup();
 
     await loadFromGist();
-    const grid = document.getElementById("char-grid");
+    const grid = document.getElementById("char-sections-container");
     if (grid) renderIndexSections(grid);
     updateSettingsBtnStyle();
 
@@ -231,17 +231,21 @@ function loadCharacterPage() {
   setText("char-birthday",   character.birthday);
   setText("char-heritage",   character.heritage);
   setText("char-occupation", character.occupation);
-  setText("char-appearance", character.appearance);
-  setText("char-overview",   character.overview);
-  setText("char-background", character.background);
-  setText("char-history",    character.history);
+  // CHANGE 5: appearance uses setFormattedText to preserve newlines
+  setFormattedText("char-appearance", character.appearance);
 
   setLink("char-unvale",       "char-unvale-li",       character.links?.unvale,       "Unvale");
   setLink("char-characterhub", "char-characterhub-li", character.links?.characterhub, "CharacterHub");
   setLink("char-artfight",     "char-artfight-li",     character.links?.artfight,     "Artfight");
   setLink("char-spotify",      "char-spotify-li",      character.links?.spotify,      "Playlist");
 
-  // CHANGE 3: ref image locked to 5:4 ratio, object-fit: contain so full image is always visible
+  // CHANGE 3: Merge background + history into one block with inline truncation
+  renderBackgroundHistory(character.background, character.history);
+
+  // CHANGE 5: overview uses setFormattedText
+  setFormattedText("char-overview", character.overview);
+
+  // Ref image
   const refWrap = document.querySelector(".char-ref-wrap");
   const img     = document.querySelector(".char-ref");
   if (character.refImage && refWrap && img) {
@@ -261,11 +265,79 @@ function loadCharacterPage() {
 
   renderGallery(character.gallery || []);
   document.title = (character.name || "Character") + " — Character Sheet";
+
+  // CHANGE 4: Wire up the edit button on the character page
+  const editBtn = document.getElementById("char-page-edit-btn");
+  if (editBtn) {
+    editBtn.addEventListener("click", () => {
+      // open editor overlay if it exists (inline edit modal on character page)
+      openCharPageEditor(id);
+    });
+  }
+}
+
+// CHANGE 3: Render background + history as one unified block with truncation
+const TRUNCATE_CHARS = 500;
+
+function renderBackgroundHistory(background, history) {
+  const container = document.getElementById("char-bg-history-container");
+  if (!container) return;
+
+  // Support old data: if history field has content not already in background, append it
+  let fullText = background || "";
+  if (history && !fullText.includes(history)) {
+    fullText = [fullText, history].filter(Boolean).join("\n\n");
+  }
+
+  if (!fullText) {
+    container.innerHTML = "";
+    return;
+  }
+
+  if (fullText.length <= TRUNCATE_CHARS) {
+    // Short enough — show everything, no toggle needed
+    container.innerHTML = `<p class="char-body char-formatted" id="char-bg-history-text">${escHtml(fullText)}</p>`;
+    return;
+  }
+
+  // Find a clean break point (end of word) near TRUNCATE_CHARS
+  let cutoff = TRUNCATE_CHARS;
+  while (cutoff < fullText.length && fullText[cutoff] !== " " && fullText[cutoff] !== "\n") cutoff++;
+
+  const visible = fullText.slice(0, cutoff).trimEnd();
+  const hidden  = fullText.slice(cutoff).trimStart();
+
+  container.innerHTML = `
+    <div class="char-bg-history-block">
+      <span class="char-body char-formatted" id="char-bg-visible">${escHtml(visible)}</span><span class="char-bg-ellipsis">…</span>
+      <details class="char-details char-bg-details">
+        <summary>click here to read more</summary>
+        <span class="char-body char-formatted" id="char-bg-hidden">${escHtml(hidden)}</span>
+      </details>
+    </div>
+  `;
+
+  // When details opens, hide the ellipsis
+  const details = container.querySelector(".char-bg-details");
+  const ellipsis = container.querySelector(".char-bg-ellipsis");
+  if (details && ellipsis) {
+    details.addEventListener("toggle", () => {
+      ellipsis.style.display = details.open ? "none" : "inline";
+    });
+  }
 }
 
 function setText(id, value) {
   const el = document.getElementById(id);
   if (el) el.textContent = value || "";
+}
+
+// CHANGE 5: Set text while preserving line breaks
+function setFormattedText(id, value) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = value || "";
+  el.classList.add("char-formatted");
 }
 
 function setLink(anchorId, liId, href, label) {
@@ -281,7 +353,6 @@ function setLink(anchorId, liId, href, label) {
   }
 }
 
-// CHANGE 4: Gallery — each image at natural aspect ratio, no crop; title left, year right on same line
 function renderGallery(gallery) {
   const grid = document.querySelector(".gallery-grid");
   if (!grid) return;
@@ -302,6 +373,13 @@ function renderGallery(gallery) {
   `).join("");
 }
 
+// CHANGE 4: Open the editor from a character page (reuse the same editor modal)
+function openCharPageEditor(id) {
+  // The editor overlay lives in index.html; on character.html we redirect to index
+  // with a flag so it auto-opens. Simplest cross-page approach:
+  window.location.href = `index.html?edit=${id}`;
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // INDEX PAGE  (index.html)
 // ══════════════════════════════════════════════════════════════════════
@@ -311,6 +389,9 @@ async function loadIndexPage() {
   if (!container) return;
 
   updateSettingsBtnStyle();
+
+  // CHANGE 4: Auto-open editor if redirected from character page
+  const editParam = new URLSearchParams(window.location.search).get("edit");
 
   if (isConnected()) {
     setStatus("syncing");
@@ -375,9 +456,18 @@ async function loadIndexPage() {
     ?.addEventListener("input", e => {
       renderIndexSections(container, e.target.value.trim().toLowerCase());
     });
+
+  // CHANGE 4: Auto-open editor if ?edit=<id> param is present
+  if (editParam) {
+    // Clean up the URL without reloading
+    const url = new URL(window.location.href);
+    url.searchParams.delete("edit");
+    window.history.replaceState({}, "", url.toString());
+    openEditor(editParam);
+  }
 }
 
-// CHANGE 5: Index page split into "Recently Edited" row + one row per fandom
+// CHANGE 1 & 2: Recently Edited capped at 10, hidden when searching
 function renderIndexSections(container, filter) {
   filter = filter || "";
   let characters = getCharacters();
@@ -394,14 +484,32 @@ function renderIndexSections(container, filter) {
     return;
   }
 
-  // Sort by last edited (most recent first) for the top row
-  const recentlySorted = [...characters].sort((a, b) => {
-    const ta = a.updatedAt || a.id || "";
-    const tb = b.updatedAt || b.id || "";
-    return tb.localeCompare(ta);
-  });
+  let html = "";
 
-  // Group by fandom
+  // CHANGE 1+2: Only show "Recently Edited" when not searching, capped at 10
+  if (!filter) {
+    const recentlySorted = [...characters]
+      .sort((a, b) => {
+        const ta = a.updatedAt || a.id || "";
+        const tb = b.updatedAt || b.id || "";
+        return tb.localeCompare(ta);
+      })
+      .slice(0, 10); // CHANGE 1: cap at 10
+
+    html += `
+      <section class="char-section">
+        <div class="char-section-header">
+          <h2 class="char-section-title">Recently Edited</h2>
+          <span class="char-section-count">${recentlySorted.length} character${recentlySorted.length !== 1 ? "s" : ""}</span>
+        </div>
+        <div class="char-grid">
+          ${recentlySorted.map(c => renderCharCard(c)).join("")}
+        </div>
+      </section>
+    `;
+  }
+
+  // One section per fandom (always shown)
   const fandoms = {};
   characters.forEach(c => {
     const fandom = (c.fandom || "").trim() || "Uncategorized";
@@ -409,22 +517,6 @@ function renderIndexSections(container, filter) {
     fandoms[fandom].push(c);
   });
 
-  let html = "";
-
-  // Recently edited section
-  html += `
-    <section class="char-section">
-      <div class="char-section-header">
-        <h2 class="char-section-title">Recently Edited</h2>
-        <span class="char-section-count">${recentlySorted.length} character${recentlySorted.length !== 1 ? "s" : ""}</span>
-      </div>
-      <div class="char-grid">
-        ${recentlySorted.map(c => renderCharCard(c)).join("")}
-      </div>
-    </section>
-  `;
-
-  // One section per fandom
   Object.keys(fandoms).sort().forEach(fandom => {
     const chars = fandoms[fandom];
     html += `
@@ -451,9 +543,7 @@ function renderIndexSections(container, filter) {
   );
 }
 
-// CHANGE 8: Cards have 1:1 image; name + image are clickable links to character page
 function renderCharCard(c) {
-  // CHANGE 2: title image shown on card if available, otherwise fall back to refImage
   const cardImg = c.titleImage || c.refImage;
   return `
     <div class="char-card" data-id="${escHtml(c.id)}">
@@ -494,9 +584,17 @@ function openEditor(id) {
   const fields = [
     "name","fandom","nicknames","pronouns","age","birthday",
     "heritage","occupation","refImage","titleImage","appearance","overview",
-    "background","history",
+    "background",
     "links.unvale","links.characterhub","links.artfight","links.spotify"
   ];
+
+  // Backwards-compat: if character has old separate history field, merge it in on load
+  if (c?.history && !c.background?.includes(c.history)) {
+    const mergedEl = document.getElementById("ef-background");
+    if (mergedEl) {
+      mergedEl.value = [c.background, c.history].filter(Boolean).join("\n\n");
+    }
+  }
 
   fields.forEach(key => {
     const el = document.getElementById("ef-" + key.replace(".", "_"));
@@ -538,7 +636,6 @@ function addGalleryRow(item) {
   tbody.appendChild(tr);
 }
 
-// CHANGE 1: Require name + fandom before saving
 async function handleFormSubmit(e) {
   e.preventDefault();
 
@@ -578,7 +675,7 @@ async function handleFormSubmit(e) {
     appearance: valField("ef-appearance"),
     overview:   valField("ef-overview"),
     background: valField("ef-background"),
-    history:    valField("ef-history"),
+    history:    "",  // no longer used; kept for data compat with old saves
     links: {
       unvale:       valField("ef-links_unvale"),
       characterhub: valField("ef-links_characterhub"),

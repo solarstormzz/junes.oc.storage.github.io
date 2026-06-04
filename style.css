@@ -29,8 +29,6 @@ body {
 
 /* ══════════════════════════════════════════
    NAV
-   CHANGE 6+7: Logo + new-char btn on left,
-   search / + / settings grouped on the right
 ══════════════════════════════════════════ */
 
 nav {
@@ -58,7 +56,6 @@ nav {
   flex-shrink: 0;
 }
 
-/* CHANGE 7: new-char btn sits right after the logo (left side) */
 .add-char-btn {
   font-family: 'DM Sans', sans-serif;
   font-size: 0.8rem;
@@ -80,7 +77,6 @@ nav {
   border-color: #b5afa6;
 }
 
-/* CHANGE 6: right-side nav group */
 .nav-right {
   display: flex;
   align-items: center;
@@ -268,7 +264,6 @@ nav {
   padding: 2rem 3rem 1rem;
 }
 
-/* CHANGE 5: Each fandom (and "Recently Edited") is its own section */
 .char-section {
   margin-bottom: 2.5rem;
   animation: fadeUp 0.5s ease both;
@@ -301,7 +296,6 @@ nav {
 
 /* ══════════════════════════════════════════
    CHARACTER CARD GRID
-   CHANGE 8: 1:1 square image; name + image clickable
 ══════════════════════════════════════════ */
 
 .char-grid {
@@ -332,14 +326,12 @@ nav {
   transform: translateY(-2px);
 }
 
-/* CHANGE 8: image link wrapper */
 .char-card-img-link {
   display: block;
   text-decoration: none;
   color: inherit;
 }
 
-/* CHANGE 8: 1:1 square aspect ratio */
 .char-card-img-wrap {
   aspect-ratio: 1 / 1;
   overflow: hidden;
@@ -376,7 +368,6 @@ nav {
   gap: 0.2rem;
 }
 
-/* CHANGE 8: name is a link */
 .char-card-name-link {
   text-decoration: none;
   color: inherit;
@@ -554,9 +545,6 @@ footer {
 
 /* ══════════════════════════════════════════
    GALLERY
-   CHANGE 4: images at natural aspect ratio,
-   no crop, scaled to ~2-3 per row on desktop.
-   Caption left-bound, year right-bound, same line.
 ══════════════════════════════════════════ */
 
 #gallery {
@@ -572,7 +560,6 @@ footer {
   margin-bottom: 1.75rem;
 }
 
-/* CHANGE 4: 2-3 columns on desktop via minmax */
 .gallery-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -596,7 +583,6 @@ footer {
   border-color: #bfb9ae;
 }
 
-/* CHANGE 4: natural aspect ratio, no fixed height, image fully visible */
 .gallery-img-wrap {
   width: 100%;
   overflow: hidden;
@@ -614,7 +600,6 @@ footer {
   object-fit: contain;
 }
 
-/* CHANGE 4: caption + year on same line */
 .gallery-meta {
   display: flex;
   align-items: baseline;
@@ -730,6 +715,12 @@ footer {
   margin: 0;
 }
 
+/* CHANGE 5: Preserve user-entered line breaks and whitespace */
+.char-formatted {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .char-links {
   list-style: none;
   margin: 0;
@@ -777,6 +768,28 @@ footer {
   border-bottom: 1px solid var(--border);
 }
 
+/* CHANGE 3: Background+History unified block styles */
+#char-bg-history-container {
+  font-size: 0.83rem;
+  line-height: 1.7;
+  color: var(--ink);
+}
+
+.char-bg-history-block {
+  font-size: 0.83rem;
+  line-height: 1.7;
+}
+
+.char-bg-ellipsis {
+  font-size: 0.83rem;
+  color: var(--ink);
+  line-height: 1.7;
+}
+
+.char-details {
+  margin-top: 4px;
+}
+
 .char-details summary {
   font-size: 0.78rem;
   color: var(--ink-light);
@@ -808,11 +821,13 @@ footer {
   color: var(--ink-mid);
 }
 
-.char-details p {
+.char-details p,
+.char-details span.char-body {
   font-size: 0.83rem;
   line-height: 1.7;
   color: var(--ink);
   margin-top: 6px;
+  display: block;
 }
 
 /* ══════════════════════════════════════════
@@ -932,7 +947,6 @@ footer {
   margin-top: 0.75rem;
 }
 
-/* CHANGE 2: hint text under image URL fields */
 .editor-field-hint {
   font-size: 0.7rem;
   color: var(--ink-light);
@@ -1089,7 +1103,7 @@ footer {
   }
 
   .add-char-btn {
-    display: none; /* show only nav-add-btn on mobile */
+    display: none;
   }
 
   .search-wrap {
