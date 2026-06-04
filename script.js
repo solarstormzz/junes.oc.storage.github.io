@@ -231,7 +231,6 @@ function loadCharacterPage() {
   setText("char-birthday",   character.birthday);
   setText("char-heritage",   character.heritage);
   setText("char-occupation", character.occupation);
-  // CHANGE 5: appearance uses setFormattedText to preserve newlines
   setFormattedText("char-appearance", character.appearance);
 
   setLink("char-unvale",       "char-unvale-li",       character.links?.unvale,       "Unvale");
@@ -239,10 +238,7 @@ function loadCharacterPage() {
   setLink("char-artfight",     "char-artfight-li",     character.links?.artfight,     "Artfight");
   setLink("char-spotify",      "char-spotify-li",      character.links?.spotify,      "Playlist");
 
-  // CHANGE 3: Merge background + history into one block with inline truncation
   renderBackgroundHistory(character.background, character.history);
-
-  // CHANGE 5: overview uses setFormattedText
   setFormattedText("char-overview", character.overview);
 
   // Ref image
@@ -266,24 +262,254 @@ function loadCharacterPage() {
   renderGallery(character.gallery || []);
   document.title = (character.name || "Character") + " — Character Sheet";
 
-  // CHANGE 4: Wire up the edit button on the character page
+  // Overview / Relationships tab switching
+  initOverviewTabs();
+
+  // Render relationships tab
+  renderRelationships(character.relationships || [], id);
+
+  // Edit button (main character editor — redirects to index)
   const editBtn = document.getElementById("char-page-edit-btn");
   if (editBtn) {
     editBtn.addEventListener("click", () => {
-      // open editor overlay if it exists (inline edit modal on character page)
       openCharPageEditor(id);
     });
   }
+
+  // Edit relationships button — opens inline relationship editor
+  const editRelBtn = document.getElementById("edit-relationships-btn");
+  if (editRelBtn) {
+    editRelBtn.addEventListener("click", () => openRelationshipEditor(id));
+  }
 }
 
-// CHANGE 3: Render background + history as one unified block with truncation
+// ── Overview / Relationships tabs ─────────────────────────────────────
+
+function initOverviewTabs() {
+  const overviewTab = document.getElementById("tab-overview");
+  const relTab      = document.getElementById("tab-relationships");
+  const overviewPanel = document.getElementById("panel-overview");
+  const relPanel      = document.getElementById("panel-relationships");
+  const editRelBtn    = document.getElementById("edit-relationships-btn");
+
+  if (!overviewTab || !relTab) return;
+
+  // Hide edit button on overview tab by default
+  if (editRelBtn) editRelBtn.style.display = "none";
+
+  overviewTab.addEventListener("click", () => {
+    overviewTab.classList.add("active");
+    relTab.classList.remove("active");
+    overviewPanel.style.display = "";
+    relPanel.style.display = "none";
+    if (editRelBtn) editRelBtn.style.display = "none";
+  });
+
+  relTab.addEventListener("click", () => {
+    relTab.classList.add("active");
+    overviewTab.classList.remove("active");
+    relPanel.style.display = "";
+    overviewPanel.style.display = "none";
+    if (editRelBtn) editRelBtn.style.display = "";
+  });
+}
+
+// ── Relationships rendering ───────────────────────────────────────────
+
+const REL_TRUNCATE = 180;
+
+function renderRelationships(relationships, currentId) {
+  const panel = document.getElementById("panel-relationships");
+  if (!panel) return;
+
+  const editRelBtn = document.getElementById("edit-relationships-btn");
+
+  if (!relationships || !relationships.length) {
+    panel.innerHTML = `
+      <p class="rel-empty">No relationships added yet.
+        <button class="rel-empty-add-btn" onclick="document.getElementById('edit-relationships-btn').click()">Add some</button>
+      </p>`;
+    return;
+  }
+
+  const allChars = getCharacters();
+
+  const cards = relationships.map(rel => {
+    // Try to find a matching character by name (case-insensitive)
+    const match = allChars.find(c =>
+      c.id !== currentId &&
+      (c.name || "").toLowerCase().trim() === (rel.name || "").toLowerCase().trim()
+    );
+
+    const nameHtml = match
+      ? `<a href="character.html?id=${escHtml(match.id)}" class="rel-name rel-name-link">${escHtml(rel.name || "Unknown")}</a>`
+      : rel.link
+        ? `<a href="${escHtml(rel.link)}" class="rel-name rel-name-link" target="_blank" rel="noopener">${escHtml(rel.name || "Unknown")}</a>`
+        : `<span class="rel-name">${escHtml(rel.name || "Unknown")}</span>`;
+
+    const canonLabel = rel.canon === "canon"
+      ? `<span class="rel-canon rel-canon--yes">canon</span>`
+      : rel.canon === "noncanon"
+        ? `<span class="rel-canon rel-canon--no">OC</span>`
+        : "";
+
+    const desc = rel.description || "";
+    let descHtml = "";
+
+    if (!desc) {
+      descHtml = "";
+    } else if (desc.length <= REL_TRUNCATE) {
+      descHtml = `<p class="rel-desc char-formatted">${escHtml(desc)}</p>`;
+    } else {
+      let cut = REL_TRUNCATE;
+      while (cut < desc.length && desc[cut] !== " " && desc[cut] !== "\n") cut++;
+      const visible = desc.slice(0, cut).trimEnd();
+      const hidden  = desc.slice(cut).trimStart();
+      descHtml = `
+        <div class="rel-desc-block">
+          <span class="rel-desc char-formatted">${escHtml(visible)}</span><span class="rel-ellipsis">…</span>
+          <details class="rel-details">
+            <summary>read more</summary>
+            <span class="rel-desc char-formatted">${escHtml(hidden)}</span>
+          </details>
+        </div>`;
+    }
+
+    // Tiny avatar from matched character
+    const avatarHtml = match && (match.titleImage || match.refImage)
+      ? `<img src="${escHtml(match.titleImage || match.refImage)}" class="rel-avatar" alt="" />`
+      : `<div class="rel-avatar rel-avatar-placeholder">${escHtml((rel.name?.[0] || "?").toUpperCase())}</div>`;
+
+    return `
+      <div class="rel-card">
+        <div class="rel-card-header">
+          ${avatarHtml}
+          <div class="rel-card-meta">
+            <div class="rel-name-row">
+              ${nameHtml}
+              ${canonLabel}
+            </div>
+            ${rel.type ? `<span class="rel-type">${escHtml(rel.type)}</span>` : ""}
+          </div>
+        </div>
+        ${descHtml}
+      </div>`;
+  }).join("");
+
+  panel.innerHTML = `<div class="rel-grid">${cards}</div>`;
+
+  // Wire up details toggles
+  panel.querySelectorAll(".rel-details").forEach(det => {
+    const ellipsis = det.previousElementSibling;
+    if (ellipsis?.classList.contains("rel-ellipsis")) {
+      det.addEventListener("toggle", () => {
+        ellipsis.style.display = det.open ? "none" : "inline";
+      });
+    }
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// RELATIONSHIP EDITOR  (opens on character.html, inline)
+// ══════════════════════════════════════════════════════════════════════
+
+let relEditingCharId = null;
+
+function openRelationshipEditor(charId) {
+  const overlay = document.getElementById("rel-editor-overlay");
+  if (!overlay) return;
+
+  relEditingCharId = charId;
+  const characters = getCharacters();
+  const character  = characters.find(c => c.id === charId);
+
+  const tbody = document.getElementById("rel-editor-rows");
+  if (tbody) {
+    tbody.innerHTML = "";
+    (character?.relationships || []).forEach(rel => addRelRow(rel));
+  }
+
+  overlay.classList.add("open");
+  document.body.style.overflow = "hidden";
+}
+
+function closeRelationshipEditor() {
+  document.getElementById("rel-editor-overlay")?.classList.remove("open");
+  document.body.style.overflow = "";
+  relEditingCharId = null;
+}
+
+function addRelRow(rel) {
+  rel = rel || {};
+  const tbody = document.getElementById("rel-editor-rows");
+  if (!tbody) return;
+
+  const tr = document.createElement("tr");
+  tr.classList.add("rel-editor-row");
+  tr.innerHTML = `
+    <td class="rel-editor-cell rel-editor-cell--name">
+      <input type="text" class="rel-r-name" placeholder="Name" value="${escHtml(rel.name || "")}" />
+    </td>
+    <td class="rel-editor-cell rel-editor-cell--type">
+      <input type="text" class="rel-r-type" placeholder="e.g. best friend, rival" value="${escHtml(rel.type || "")}" />
+    </td>
+   <td class="rel-editor-cell rel-editor-cell--canon">
+      <select class="rel-r-canon">
+        <option value=""         ${!rel.canon                    ? "selected" : ""}>—</option>
+        <option value="canon"    ${rel.canon === "canon"         ? "selected" : ""}>Canon character</option>
+        <option value="noncanon" ${rel.canon === "noncanon"      ? "selected" : ""}>OC</option>
+      </select>
+    </td>
+    <td class="rel-editor-cell rel-editor-cell--link">
+      <input type="url" class="rel-r-link" placeholder="https://… (optional)" value="${escHtml(rel.link || "")}" />
+    </td>
+    <td class="rel-editor-cell rel-editor-cell--desc">
+      <textarea class="rel-r-desc" rows="2" placeholder="Short description…">${escHtml(rel.description || "")}</textarea>
+    </td>
+    <td class="rel-editor-cell rel-editor-cell--rm">
+      <button type="button" class="rm-rel-row" title="Remove">✕</button>
+    </td>
+  `;
+  tr.querySelector(".rm-rel-row").addEventListener("click", () => tr.remove());
+  tbody.appendChild(tr);
+}
+
+async function handleRelFormSubmit(e) {
+  e.preventDefault();
+  if (!relEditingCharId) return;
+
+  const rows = Array.from(document.querySelectorAll("#rel-editor-rows .rel-editor-row"));
+  const relationships = rows.map(tr => ({
+    name:        (tr.querySelector(".rel-r-name")?.value  || "").trim(),
+    type:        (tr.querySelector(".rel-r-type")?.value  || "").trim(),
+    canon:       (tr.querySelector(".rel-r-canon")?.value || ""),
+    link:        (tr.querySelector(".rel-r-link")?.value  || "").trim(),
+    description: (tr.querySelector(".rel-r-desc")?.value  || "").trim(),
+  })).filter(r => r.name);
+
+  const characters = getCharacters();
+  const idx = characters.findIndex(c => c.id === relEditingCharId);
+  if (idx !== -1) {
+    characters[idx].relationships = relationships;
+    characters[idx].updatedAt = new Date().toISOString();
+  }
+
+  closeRelationshipEditor();
+
+  // Re-render relationships panel in place
+  renderRelationships(relationships, relEditingCharId);
+
+  await saveCharacters(characters);
+}
+
+// ── Helper functions used by character page ───────────────────────────
+
 const TRUNCATE_CHARS = 500;
 
 function renderBackgroundHistory(background, history) {
   const container = document.getElementById("char-bg-history-container");
   if (!container) return;
 
-  // Support old data: if history field has content not already in background, append it
   let fullText = background || "";
   if (history && !fullText.includes(history)) {
     fullText = [fullText, history].filter(Boolean).join("\n\n");
@@ -295,12 +521,10 @@ function renderBackgroundHistory(background, history) {
   }
 
   if (fullText.length <= TRUNCATE_CHARS) {
-    // Short enough — show everything, no toggle needed
     container.innerHTML = `<p class="char-body char-formatted" id="char-bg-history-text">${escHtml(fullText)}</p>`;
     return;
   }
 
-  // Find a clean break point (end of word) near TRUNCATE_CHARS
   let cutoff = TRUNCATE_CHARS;
   while (cutoff < fullText.length && fullText[cutoff] !== " " && fullText[cutoff] !== "\n") cutoff++;
 
@@ -317,8 +541,7 @@ function renderBackgroundHistory(background, history) {
     </div>
   `;
 
-  // When details opens, hide the ellipsis
-  const details = container.querySelector(".char-bg-details");
+  const details  = container.querySelector(".char-bg-details");
   const ellipsis = container.querySelector(".char-bg-ellipsis");
   if (details && ellipsis) {
     details.addEventListener("toggle", () => {
@@ -332,7 +555,6 @@ function setText(id, value) {
   if (el) el.textContent = value || "";
 }
 
-// CHANGE 5: Set text while preserving line breaks
 function setFormattedText(id, value) {
   const el = document.getElementById(id);
   if (!el) return;
@@ -373,10 +595,7 @@ function renderGallery(gallery) {
   `).join("");
 }
 
-// CHANGE 4: Open the editor from a character page (reuse the same editor modal)
 function openCharPageEditor(id) {
-  // The editor overlay lives in index.html; on character.html we redirect to index
-  // with a flag so it auto-opens. Simplest cross-page approach:
   window.location.href = `index.html?edit=${id}`;
 }
 
@@ -390,7 +609,6 @@ async function loadIndexPage() {
 
   updateSettingsBtnStyle();
 
-  // CHANGE 4: Auto-open editor if redirected from character page
   const editParam = new URLSearchParams(window.location.search).get("edit");
 
   if (isConnected()) {
@@ -457,9 +675,7 @@ async function loadIndexPage() {
       renderIndexSections(container, e.target.value.trim().toLowerCase());
     });
 
-  // CHANGE 4: Auto-open editor if ?edit=<id> param is present
   if (editParam) {
-    // Clean up the URL without reloading
     const url = new URL(window.location.href);
     url.searchParams.delete("edit");
     window.history.replaceState({}, "", url.toString());
@@ -467,7 +683,6 @@ async function loadIndexPage() {
   }
 }
 
-// CHANGE 1 & 2: Recently Edited capped at 10, hidden when searching
 function renderIndexSections(container, filter) {
   filter = filter || "";
   let characters = getCharacters();
@@ -486,7 +701,6 @@ function renderIndexSections(container, filter) {
 
   let html = "";
 
-  // CHANGE 1+2: Only show "Recently Edited" when not searching, capped at 10
   if (!filter) {
     const recentlySorted = [...characters]
       .sort((a, b) => {
@@ -494,7 +708,7 @@ function renderIndexSections(container, filter) {
         const tb = b.updatedAt || b.id || "";
         return tb.localeCompare(ta);
       })
-      .slice(0, 10); // CHANGE 1: cap at 10
+      .slice(0, 10);
 
     html += `
       <section class="char-section">
@@ -509,7 +723,6 @@ function renderIndexSections(container, filter) {
     `;
   }
 
-  // One section per fandom (always shown)
   const fandoms = {};
   characters.forEach(c => {
     const fandom = (c.fandom || "").trim() || "Uncategorized";
@@ -534,7 +747,6 @@ function renderIndexSections(container, filter) {
 
   container.innerHTML = html;
 
-  // Attach events
   container.querySelectorAll(".char-card-edit").forEach(btn =>
     btn.addEventListener("click", () => openEditor(btn.dataset.id))
   );
@@ -569,7 +781,7 @@ function renderCharCard(c) {
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// EDITOR MODAL
+// EDITOR MODAL  (index.html)
 // ══════════════════════════════════════════════════════════════════════
 
 let editingId = null;
@@ -588,7 +800,6 @@ function openEditor(id) {
     "links.unvale","links.characterhub","links.artfight","links.spotify"
   ];
 
-  // Backwards-compat: if character has old separate history field, merge it in on load
   if (c?.history && !c.background?.includes(c.history)) {
     const mergedEl = document.getElementById("ef-background");
     if (mergedEl) {
@@ -659,23 +870,27 @@ async function handleFormSubmit(e) {
 
   const now = new Date().toISOString();
 
+  // Preserve existing relationships when saving via main editor
+  const existingChar = editingId ? getCharacters().find(c => c.id === editingId) : null;
+
   const character = {
-    id:         editingId || generateId(),
-    updatedAt:  now,
+    id:            editingId || generateId(),
+    updatedAt:     now,
     name,
     fandom,
-    nicknames:  valField("ef-nicknames"),
-    pronouns:   valField("ef-pronouns"),
-    age:        valField("ef-age"),
-    birthday:   valField("ef-birthday"),
-    heritage:   valField("ef-heritage"),
-    occupation: valField("ef-occupation"),
-    titleImage: valField("ef-titleImage"),
-    refImage:   valField("ef-refImage"),
-    appearance: valField("ef-appearance"),
-    overview:   valField("ef-overview"),
-    background: valField("ef-background"),
-    history:    "",  // no longer used; kept for data compat with old saves
+    nicknames:     valField("ef-nicknames"),
+    pronouns:      valField("ef-pronouns"),
+    age:           valField("ef-age"),
+    birthday:      valField("ef-birthday"),
+    heritage:      valField("ef-heritage"),
+    occupation:    valField("ef-occupation"),
+    titleImage:    valField("ef-titleImage"),
+    refImage:      valField("ef-refImage"),
+    appearance:    valField("ef-appearance"),
+    overview:      valField("ef-overview"),
+    background:    valField("ef-background"),
+    history:       "",
+    relationships: existingChar?.relationships || [],
     links: {
       unvale:       valField("ef-links_unvale"),
       characterhub: valField("ef-links_characterhub"),
@@ -715,4 +930,14 @@ async function deleteCharacter(id) {
 document.addEventListener("DOMContentLoaded", function() {
   loadIndexPage();
   loadCharacterPage();
+
+  // Relationship editor wiring (character.html only)
+  document.getElementById("rel-editor-close")
+    ?.addEventListener("click", closeRelationshipEditor);
+  document.getElementById("rel-editor-overlay")
+    ?.addEventListener("click", e => { if (e.target.id === "rel-editor-overlay") closeRelationshipEditor(); });
+  document.getElementById("rel-editor-form")
+    ?.addEventListener("submit", handleRelFormSubmit);
+  document.getElementById("add-rel-row")
+    ?.addEventListener("click", () => addRelRow());
 });

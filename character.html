@@ -79,7 +79,7 @@
       }
     }
 
-    /* CHANGE 4: Edit button in nav */
+    /* ── Edit button in char nav ── */
     .char-nav-edit-btn {
       display: inline-flex;
       align-items: center;
@@ -102,34 +102,14 @@
       background: var(--surface);
     }
 
-    /* CHANGE 3: unified background+history block */
-    .char-bg-history-block {
-      display: block;
-    }
-
-    .char-bg-details {
-      display: inline;
-    }
-
-    .char-bg-details summary {
-      display: inline-flex;
-      margin-top: 8px;
-    }
-
-    .char-bg-details[open] {
-      display: block;
-    }
-
+    /* ── Background+history block ── */
+    .char-bg-history-block { display: block; }
+    .char-bg-details { display: inline; }
+    .char-bg-details summary { display: inline-flex; margin-top: 8px; }
+    .char-bg-details[open] { display: block; }
     .char-bg-details[open] p,
-    .char-bg-details[open] span {
-      display: block;
-      margin-top: 6px;
-    }
-
-    .char-bg-ellipsis {
-      font-size: 0.83rem;
-      color: var(--ink);
-    }
+    .char-bg-details[open] span { display: block; margin-top: 6px; }
+    .char-bg-ellipsis { font-size: 0.83rem; color: var(--ink); }
   </style>
 </head>
 <body>
@@ -138,7 +118,6 @@
 <nav class="char-nav">
   <a href="index.html" class="char-nav-back">Back</a>
   <div class="char-nav-tabs">
-    <!-- CHANGE 4: Edit button -->
     <button id="char-page-edit-btn" class="char-nav-edit-btn">Edit</button>
     <a href="#info" class="char-nav-tab active">Info</a>
     <a href="#gallery" class="char-nav-tab">Gallery</a>
@@ -149,46 +128,26 @@
 <div id="info" class="page">
   <div class="char-sheet">
 
-    <!-- REF IMAGE — shown/hidden by script.js, locked to 5:4 with contain -->
+    <!-- REF IMAGE -->
     <div class="char-ref-wrap" style="display:none">
       <img class="char-ref" src="" alt="Character reference sheet" />
     </div>
 
     <!-- LEFT: BASICS -->
     <aside class="char-basics">
-
       <h1 class="char-name" id="char-name"></h1>
       <p class="char-fandom" id="char-fandom"></p>
 
       <table class="char-table">
-        <tr>
-          <td>Nicknames</td>
-          <td id="char-nicknames"></td>
-        </tr>
-        <tr>
-          <td>Pronouns</td>
-          <td id="char-pronouns"></td>
-        </tr>
-        <tr>
-          <td>Age</td>
-          <td id="char-age"></td>
-        </tr>
-        <tr>
-          <td>Birthday</td>
-          <td id="char-birthday"></td>
-        </tr>
-        <tr>
-          <td>Heritage</td>
-          <td id="char-heritage"></td>
-        </tr>
-        <tr>
-          <td>Occupation</td>
-          <td id="char-occupation"></td>
-        </tr>
+        <tr><td>Nicknames</td><td id="char-nicknames"></td></tr>
+        <tr><td>Pronouns</td><td id="char-pronouns"></td></tr>
+        <tr><td>Age</td><td id="char-age"></td></tr>
+        <tr><td>Birthday</td><td id="char-birthday"></td></tr>
+        <tr><td>Heritage</td><td id="char-heritage"></td></tr>
+        <tr><td>Occupation</td><td id="char-occupation"></td></tr>
       </table>
 
       <h2 class="char-section-heading">Appearance</h2>
-      <!-- CHANGE 5: char-formatted class added by JS for pre-wrap -->
       <p class="char-body" id="char-appearance"></p>
 
       <h2 class="char-section-heading">Links</h2>
@@ -198,22 +157,34 @@
         <li id="char-artfight-li"><a href="#" id="char-artfight">Artfight</a></li>
         <li id="char-spotify-li"><a href="#" id="char-spotify">Playlist</a></li>
       </ul>
-
     </aside>
 
-    <!-- RIGHT: OVERVIEW -->
+    <!-- RIGHT: OVERVIEW PANEL with tabs -->
     <main class="char-overview">
 
-      <h2 class="char-overview-heading">Overview</h2>
-      <!-- CHANGE 5: char-formatted class added by JS -->
-      <p class="char-body" style="margin-bottom: 20px;" id="char-overview"></p>
+      <!-- Tab bar -->
+      <div class="overview-tab-bar">
+        <div class="overview-tabs">
+          <button id="tab-overview" class="overview-tab active">Overview</button>
+          <button id="tab-relationships" class="overview-tab">Relationships</button>
+        </div>
+        <!-- Edit relationships button, only relevant when on relationships tab -->
+        <button id="edit-relationships-btn" class="rel-edit-trigger" title="Edit relationships">Edit</button>
+      </div>
 
-      <!-- CHANGE 3: Unified background + history block; populated by renderBackgroundHistory() -->
-      <h2 class="char-overview-subheading">Background &amp; History</h2>
-      <div id="char-bg-history-container"></div>
+      <!-- Overview panel -->
+      <div id="panel-overview" class="overview-panel">
+        <p class="char-body" style="margin-bottom: 20px;" id="char-overview"></p>
+        <h2 class="char-overview-subheading">Background &amp; History</h2>
+        <div id="char-bg-history-container"></div>
+      </div>
+
+      <!-- Relationships panel (hidden by default) -->
+      <div id="panel-relationships" class="overview-panel" style="display:none">
+        <!-- Populated by renderRelationships() -->
+      </div>
 
     </main>
-
   </div>
 </div>
 
@@ -225,8 +196,59 @@
   </div>
 </section>
 
+<!-- ══════════════════════════════════════════════════════════════
+     RELATIONSHIP EDITOR MODAL  (lives on character.html)
+══════════════════════════════════════════════════════════════ -->
+<div id="rel-editor-overlay" class="editor-overlay">
+  <div class="editor-modal rel-editor-modal">
+
+    <div class="editor-modal-header">
+      <h2 class="editor-modal-title">Edit Relationships</h2>
+      <button id="rel-editor-close" class="editor-close" aria-label="Close">✕</button>
+    </div>
+
+    <form id="rel-editor-form" class="editor-form">
+
+      <p class="rel-editor-hint">
+        If a name matches another character on this site exactly, it will link automatically.
+        Add an optional URL as a fallback for external links.
+      </p>
+
+      <div class="rel-editor-table-wrap">
+        <table class="rel-editor-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Relationship type</th>
+              <th>Status</th>
+              <th>Link (optional)</th>
+              <th>Description</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="rel-editor-rows">
+            <!-- Rows added dynamically -->
+          </tbody>
+        </table>
+      </div>
+
+      <button type="button" id="add-rel-row" class="add-gallery-btn">+ Add Relationship</button>
+
+      <div class="editor-actions">
+        <button type="button" class="editor-btn-cancel" id="rel-editor-cancel">Cancel</button>
+        <button type="submit" class="editor-btn-save">Save Relationships</button>
+      </div>
+
+    </form>
+  </div>
+</div>
+
 <script src="script.js"></script>
 <script>
+  // Cancel button wiring (inline so it's available immediately)
+  document.getElementById("rel-editor-cancel")
+    ?.addEventListener("click", () => closeRelationshipEditor());
+
   // Highlight active nav tab on scroll
   const tabs = document.querySelectorAll('.char-nav-tab');
   const sections = ['info', 'gallery'].map(id => document.getElementById(id));
