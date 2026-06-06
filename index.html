@@ -44,6 +44,9 @@
   </div>
 
   <div class="char-index-wrap">
+    <div class="index-header">
+      <span id="total-char-count" class="total-char-count"></span>
+    </div>
     <div id="char-sections-container">
       <!-- Populated by script.js -->
     </div>
@@ -183,6 +186,22 @@
           </div>
         </fieldset>
 
+        <fieldset class="editor-fieldset">
+          <legend>Custom Links</legend>
+          <p class="editor-field-hint" style="margin-bottom:0.5rem">Add any links with a custom title — they'll appear
+            alongside the standard links on the character page.</p>
+          <table class="gallery-editor-table">
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>URL</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="custom-link-rows"></tbody>
+          </table>
+          <button type="button" id="add-custom-link-row" class="add-gallery-btn">+ Add Link</button>
+        </fieldset>
         <!-- ── Gallery ── -->
         <fieldset class="editor-fieldset">
           <legend>Gallery</legend>
@@ -196,9 +215,7 @@
                 <th></th>
               </tr>
             </thead>
-            <tbody id="gallery-rows">
-              <!-- Rows added dynamically -->
-            </tbody>
+            <tbody id="gallery-rows"></tbody>
           </table>
           <button type="button" id="add-gallery-row" class="add-gallery-btn">+ Add Image</button>
         </fieldset>
