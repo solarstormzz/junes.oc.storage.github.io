@@ -493,13 +493,39 @@
       min-height: 48px;
     }
 
+    /* ── Details editor: proper fixed-height flex layout ── */
+
+    /* Modal: capped height, flex column */
+    #details-editor-overlay .editor-modal {
+      max-height: calc(100vh - 4rem);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Form: fills remaining modal space, does NOT itself scroll */
+    #details-editor-overlay .editor-form {
+      flex: 1;
+      min-height: 0;        /* lets flex child shrink past content size */
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      padding: 1.25rem 1.5rem;
+      max-height: none;     /* override global .editor-form cap */
+    }
+
+    /* Hint line: never grows */
     .details-editor-hint {
+      flex-shrink: 0;
       font-size: 0.78rem;
       color: var(--ink-light);
       line-height: 1.6;
     }
 
+    /* Chips section: fixed, never compressed */
     .details-preset-section {
+      flex-shrink: 0;
       border: 1px solid var(--border);
       border-radius: 6px;
       overflow: hidden;
@@ -517,11 +543,14 @@
       border-bottom: 1px solid var(--border);
     }
 
+    /* Chips area: fixed 2-row height, scrolls internally */
     .details-preset-grid {
       display: flex;
       flex-wrap: wrap;
       gap: 0.4rem;
-      padding: 0.75rem 0.9rem;
+      padding: 0.6rem 0.9rem;
+      max-height: 100px;
+      overflow-y: auto;
     }
 
     .details-preset-chip {
@@ -550,13 +579,19 @@
       opacity: 0.55;
     }
 
+    /* Fields section: the ONLY part that grows and scrolls */
     .details-custom-section {
+      flex: 1;              /* takes all leftover space */
+      min-height: 0;        /* critical — allows shrinking */
+      display: flex;
+      flex-direction: column;
       border: 1px solid var(--border);
       border-radius: 6px;
       overflow: hidden;
     }
 
     .details-custom-header {
+      flex-shrink: 0;
       font-family: 'DM Sans', sans-serif;
       font-size: 0.7rem;
       font-weight: 600;
@@ -568,8 +603,19 @@
       border-bottom: 1px solid var(--border);
     }
 
+    /* Rows list: fills the fields section and scrolls */
     #details-editor-rows {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      max-height: none;     /* no hard cap — the flex parent controls this */
       padding: 0.25rem 0;
+    }
+
+    /* Add button + save/cancel row: fixed at bottom */
+    #details-editor-overlay .add-gallery-btn,
+    #details-editor-overlay .editor-actions {
+      flex-shrink: 0;
     }
   </style>
 </head>
@@ -711,6 +757,121 @@
           <button type="button" class="editor-btn-cancel" id="details-editor-cancel">Cancel</button>
           <button type="submit" class="editor-btn-save">Save Details</button>
         </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════ CHARACTER EDITOR MODAL ══════════════════════════ -->
+  <!-- Same modal as index.html — needed so the Edit button on this page works as a popup -->
+  <div id="editor-overlay" class="editor-overlay">
+    <div class="editor-modal">
+
+      <div class="editor-modal-header">
+        <h2 id="editor-title" class="editor-modal-title">Edit Character</h2>
+        <button id="editor-close" class="editor-close" aria-label="Close">✕</button>
+      </div>
+
+      <form id="char-editor-form" class="editor-form">
+
+        <fieldset class="editor-fieldset">
+          <legend>Basic Info</legend>
+          <div class="editor-row">
+            <label>Name <input type="text" id="ef-name" placeholder="Character name" /></label>
+            <label>Fandom / Setting <input type="text" id="ef-fandom" placeholder="e.g. Original, Tolkien AU" /></label>
+          </div>
+          <div class="editor-row">
+            <label>Nicknames <input type="text" id="ef-nicknames" placeholder="Comma-separated" /></label>
+            <label>Pronouns <input type="text" id="ef-pronouns" placeholder="e.g. she/her" /></label>
+          </div>
+          <div class="editor-row">
+            <label>Age <input type="text" id="ef-age" /></label>
+            <label>Birthday <input type="text" id="ef-birthday" placeholder="Month Day" /></label>
+            <label>Heritage <input type="text" id="ef-heritage" /></label>
+          </div>
+          <div class="editor-row">
+            <label>Occupation <input type="text" id="ef-occupation" /></label>
+          </div>
+        </fieldset>
+
+        <fieldset class="editor-fieldset">
+          <legend>Main Images</legend>
+          <div class="editor-row">
+            <label>Ref Image URL
+              <input type="url" id="ef-refImage" placeholder="https://…" />
+              <span class="editor-field-hint">Shown on the character page</span>
+            </label>
+            <label>Title Image URL
+              <input type="url" id="ef-titleImage" placeholder="https://…" />
+              <span class="editor-field-hint">Shown on the index card only</span>
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset class="editor-fieldset">
+          <legend>Appearance</legend>
+          <label class="editor-label-full">
+            <textarea id="ef-appearance" rows="3" placeholder="Describe the character's appearance..."></textarea>
+          </label>
+        </fieldset>
+
+        <fieldset class="editor-fieldset">
+          <legend>Overview &amp; History</legend>
+          <label class="editor-label-full">Overview
+            <textarea id="ef-overview" rows="3" placeholder="Short summary shown at the top of the page..."></textarea>
+          </label>
+          <label class="editor-label-full">Background &amp; History
+            <textarea id="ef-background" rows="7"
+              placeholder="Write the full background and history here. A 'read more' will automatically appear after the first ~500 characters."></textarea>
+          </label>
+        </fieldset>
+
+        <fieldset class="editor-fieldset">
+          <legend>Links</legend>
+          <div class="editor-row">
+            <label>Unvale URL <input type="url" id="ef-links_unvale" placeholder="https://..." /></label>
+            <label>CharacterHub URL <input type="url" id="ef-links_characterhub" placeholder="https://..." /></label>
+          </div>
+          <div class="editor-row">
+            <label>Artfight URL <input type="url" id="ef-links_artfight" placeholder="https://..." /></label>
+            <label>Spotify Playlist <input type="url" id="ef-links_spotify" placeholder="https://..." /></label>
+          </div>
+        </fieldset>
+
+        <fieldset class="editor-fieldset">
+          <legend>Custom Links</legend>
+          <p class="editor-field-hint" style="margin-bottom:0.5rem">Add any links with a custom title — they'll appear
+            alongside the standard links on the character page.</p>
+          <table class="gallery-editor-table">
+            <thead>
+              <tr><th>Title</th><th>URL</th><th></th></tr>
+            </thead>
+            <tbody id="custom-link-rows"></tbody>
+          </table>
+          <button type="button" id="add-custom-link-row" class="add-gallery-btn">+ Add Link</button>
+        </fieldset>
+
+        <fieldset class="editor-fieldset">
+          <legend>Gallery</legend>
+          <table class="gallery-editor-table">
+            <thead>
+              <tr>
+                <th>Image URL</th><th>Caption</th><th>Characters tagged</th><th>Year</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="gallery-rows"></tbody>
+          </table>
+          <button type="button" id="add-gallery-row" class="add-gallery-btn">+ Add Image</button>
+        </fieldset>
+
+        <!-- Delete left, Cancel + Save right -->
+        <div class="editor-actions">
+          <div class="editor-delete-zone">
+            <button type="button" id="editor-delete-btn" class="editor-btn-delete" style="display:none">Delete Character</button>
+          </div>
+          <button type="button" class="editor-btn-cancel" id="editor-close-bottom">Cancel</button>
+          <button type="submit" class="editor-btn-save">Save Character</button>
+        </div>
+
       </form>
     </div>
   </div>

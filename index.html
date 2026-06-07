@@ -202,6 +202,7 @@
           </table>
           <button type="button" id="add-custom-link-row" class="add-gallery-btn">+ Add Link</button>
         </fieldset>
+
         <!-- ── Gallery ── -->
         <fieldset class="editor-fieldset">
           <legend>Gallery</legend>
@@ -220,7 +221,11 @@
           <button type="button" id="add-gallery-row" class="add-gallery-btn">+ Add Image</button>
         </fieldset>
 
+        <!-- ── Actions: delete left, cancel+save right ── -->
         <div class="editor-actions">
+          <div class="editor-delete-zone">
+            <button type="button" id="editor-delete-btn" class="editor-btn-delete" style="display:none">Delete Character</button>
+          </div>
           <button type="button" class="editor-btn-cancel" id="editor-close-bottom">Cancel</button>
           <button type="submit" class="editor-btn-save">Save Character</button>
         </div>

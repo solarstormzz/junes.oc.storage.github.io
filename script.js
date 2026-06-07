@@ -204,7 +204,6 @@ function loadCharacterPage() {
 
   setText("char-name",       character.name);
   setText("char-fandom",     character.fandom);
-  // nicknames removed from basics table — shown in Details panel
   setText("char-pronouns",   character.pronouns);
   setText("char-age",        character.age);
   setText("char-birthday",   character.birthday);
@@ -306,7 +305,6 @@ function initOverviewTabs(charId) {
 // DETAILS PANEL
 // ══════════════════════════════════════════════════════════════════════
 
-// Preset fields — label + whether it spans both columns
 const DETAILS_PRESETS = [
   { key: "fullName",    label: "Full Legal Name", wide: false },
   { key: "nickname",    label: "Nickname",        wide: false },
@@ -336,11 +334,8 @@ function renderDetails(details, character, charId) {
   const panel = document.getElementById("panel-details");
   if (!panel) return;
 
-  // Merge: always show nicknames from basic info if present
-  // Build effective list — prepend nickname from character.nicknames if not already in details
   let effectiveDetails = details || [];
 
-  // Auto-inject nicknames field if character has nicknames and it's not already in details
   const hasNicknameField = effectiveDetails.some(d => d.key === "nickname" || (d.label || "").toLowerCase() === "nickname");
   if (character.nicknames && character.nicknames.trim() && !hasNicknameField) {
     effectiveDetails = [{ key: "nickname", label: "Nickname", value: character.nicknames, wide: false }, ...effectiveDetails];
@@ -379,11 +374,9 @@ function openDetailsEditor(charId) {
   const character  = characters.find(c => c.id === charId);
   const existing   = character?.details || [];
 
-  // Populate rows
   const tbody = document.getElementById("details-editor-rows");
   if (tbody) {
     tbody.innerHTML = "";
-    // If character has nicknames but no nickname detail field, seed it
     const hasNicknameRow = existing.some(d => d.key === "nickname");
     if (character?.nicknames && character.nicknames.trim() && !hasNicknameRow) {
       addDetailsRow({ key: "nickname", label: "Nickname", value: character.nicknames, wide: false });
@@ -391,7 +384,6 @@ function openDetailsEditor(charId) {
     existing.forEach(d => addDetailsRow(d));
   }
 
-  // Render preset chips
   renderPresetChips(existing);
 
   overlay.classList.add("open");
@@ -414,7 +406,6 @@ function renderPresetChips(existing) {
       addDetailsRow({ key: btn.dataset.key, label: btn.dataset.label, value: "", wide: btn.dataset.wide === "true" });
       btn.classList.add("chip-added");
       btn.disabled = true;
-      // Scroll to bottom of rows
       const tbody = document.getElementById("details-editor-rows");
       tbody?.lastElementChild?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     });
@@ -445,7 +436,6 @@ function addDetailsRow(field) {
     <input type="hidden" class="det-key" value="${escHtml(field.key || "")}" />
   `;
   row.querySelector(".rm-details-row").addEventListener("click", () => {
-    // Re-enable the chip if it was a preset
     const keyInp = row.querySelector(".det-key");
     if (keyInp?.value) {
       const chip = document.querySelector(`.details-preset-chip[data-key="${keyInp.value}"]`);
@@ -524,7 +514,6 @@ async function saveTreeMap(charId, map) {
   await saveCharacters(chars);
 }
 
-// ── State ─────────────────────────────────────────────────────────────
 let _treeCharId   = null;
 let _treeEditMode = false;
 
@@ -569,7 +558,6 @@ function renderTree(charId) {
   });
 }
 
-// ── Default sidebar: member list with relationship types ──────────────
 function showTreeDefaultSidebar(charId) {
   const wrap = document.getElementById("tree-sidebar-wrap");
   if (!wrap) return;
@@ -579,7 +567,6 @@ function showTreeDefaultSidebar(charId) {
   const map      = getTreeMap(character);
   const focalKey = character.name;
 
-  // Build a lookup of relationship types keyed by name (lowercase)
   const relMap = {};
   (character.relationships || []).forEach(r => {
     if (r.name) relMap[r.name.toLowerCase().trim()] = r.type || "";
@@ -587,7 +574,6 @@ function showTreeDefaultSidebar(charId) {
 
   const focalData = map[focalKey] || { parents: [], partners: [], children: [] };
 
-  // Assign tree roles relative to the focal character
   const treeRoles = {};
 
   function assignRole(names, role) {
@@ -596,21 +582,17 @@ function showTreeDefaultSidebar(charId) {
     });
   }
 
-  // Direct connections
   assignRole(focalData.parents,  "Parent");
   assignRole(focalData.partners, "Partner");
   assignRole(focalData.children, "Child");
 
-  // Extended family
   Object.entries(map).forEach(([nodeName, nd]) => {
     if (nodeName === focalKey) return;
 
-    // Siblings: share a parent with focal
     if ((nd.parents || []).some(p => (focalData.parents || []).includes(p))) {
       if (!treeRoles[nodeName]) treeRoles[nodeName] = "Sibling";
     }
 
-    // Grandparents: parents of focal's parents
     (focalData.parents || []).forEach(parent => {
       const parentData = map[parent];
       if (!parentData) return;
@@ -619,7 +601,6 @@ function showTreeDefaultSidebar(charId) {
       }
     });
 
-    // Grandchildren: children of focal's children
     (focalData.children || []).forEach(child => {
       const childData = map[child];
       if (!childData) return;
@@ -628,7 +609,6 @@ function showTreeDefaultSidebar(charId) {
       }
     });
 
-    // Fallback for any remaining placed node
     if (!treeRoles[nodeName] && map[nodeName]) treeRoles[nodeName] = "Family";
   });
 
@@ -699,7 +679,6 @@ function showTreeDefaultSidebar(charId) {
       <div class="tree-sb-members">${rows}</div>
     </div>`;
 
-  // Wire up "add rel. type" buttons → open relationship editor with name pre-filled
   wrap.querySelectorAll(".tree-sb-add-rel").forEach(btn => {
     btn.addEventListener("click", () => {
       openRelationshipEditor(charId);
@@ -721,7 +700,6 @@ function showTreeDefaultSidebar(charId) {
   });
 }
 
-// ── Node edit sidebar ─────────────────────────────────────────────────
 function showNodeEditSidebar(charId, nodeName) {
   const wrap = document.getElementById("tree-sidebar-wrap");
   if (!wrap) return;
@@ -1105,9 +1083,10 @@ function wireExpandable(block) {
 
 // ══════════════════════════════════════════════════════════════════════
 // RELATIONSHIPS
+// FIX 3: Raised cutoff to 1000 characters
 // ══════════════════════════════════════════════════════════════════════
 
-const REL_TRUNCATE = 180;
+const REL_TRUNCATE = 1000;
 
 function renderRelationships(relationships, currentId) {
   const panel = document.getElementById("panel-relationships");
@@ -1347,7 +1326,8 @@ function renderGallery(ownGallery, currentCharId) {
 }
 
 function openCharPageEditor(id) {
-  window.location.href = `index.html?edit=${id}`;
+  // FIX 4: Open edit modal directly on character page instead of navigating away
+  openEditor(id);
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -1410,6 +1390,10 @@ async function loadIndexPage() {
   }
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// FIX 1: Carousel-style index sections (replace horizontal scroll)
+// ══════════════════════════════════════════════════════════════════════
+
 function renderIndexSections(container, filter) {
   filter = filter || "";
   let characters = getCharacters();
@@ -1428,22 +1412,16 @@ function renderIndexSections(container, filter) {
     container.innerHTML = `<p class="empty-state" style="padding:1rem 0">${filter ? "No characters match your search." : "No characters yet. Add one!"}</p>`;
     return;
   }
-  let html = "";
+
+  let sections = [];
+
   if (!filter) {
     const recentlySorted = [...characters]
       .sort((a, b) => (b.updatedAt || b.id || "").localeCompare(a.updatedAt || a.id || ""))
       .slice(0, 10);
-    html += `
-      <section class="char-section">
-        <div class="char-section-header">
-          <h2 class="char-section-title">Recently Edited</h2>
-          <span class="char-section-count">${recentlySorted.length} character${recentlySorted.length !== 1 ? "s" : ""}</span>
-        </div>
-        <div class="char-scroll-row">
-          ${recentlySorted.map(c => renderCharCard(c)).join("")}
-        </div>
-      </section>`;
+    sections.push({ title: "Recently Edited", chars: recentlySorted });
   }
+
   const fandoms = {};
   characters.forEach(c => {
     const fandom = (c.fandom || "").trim() || "Uncategorized";
@@ -1451,27 +1429,49 @@ function renderIndexSections(container, filter) {
     fandoms[fandom].push(c);
   });
   Object.keys(fandoms).sort().forEach(fandom => {
-    const chars = fandoms[fandom];
-    html += `
-      <section class="char-section">
-        <div class="char-section-header">
-          <h2 class="char-section-title">${escHtml(fandom)}</h2>
-          <span class="char-section-count">${chars.length} character${chars.length !== 1 ? "s" : ""}</span>
-        </div>
-        <div class="char-scroll-row">
-          ${chars.map(c => renderCharCard(c)).join("")}
-        </div>
-      </section>`;
+    sections.push({ title: fandom, chars: fandoms[fandom] });
   });
+
+  let html = sections.map((sec, sIdx) => `
+    <section class="char-section" data-section="${sIdx}">
+      <div class="char-section-header">
+        <h2 class="char-section-title">${escHtml(sec.title)}</h2>
+        <div class="char-section-right">
+          <span class="char-section-count">${sec.chars.length} character${sec.chars.length !== 1 ? "s" : ""}</span>
+          ${sec.chars.length > 4 ? `
+            <div class="carousel-controls">
+              <button class="carousel-btn carousel-prev" data-section="${sIdx}" aria-label="Previous">‹</button>
+              <button class="carousel-btn carousel-next" data-section="${sIdx}" aria-label="Next">›</button>
+            </div>` : ""}
+        </div>
+      </div>
+      <div class="char-carousel-wrap">
+        <div class="char-carousel" data-section="${sIdx}">
+          ${sec.chars.map(c => renderCharCard(c)).join("")}
+        </div>
+      </div>
+    </section>`).join("");
+
   container.innerHTML = html;
-  container.querySelectorAll(".char-card-edit").forEach(btn =>
-    btn.addEventListener("click", () => openEditor(btn.dataset.id))
-  );
-  container.querySelectorAll(".char-card-delete").forEach(btn =>
-    btn.addEventListener("click", () => deleteCharacter(btn.dataset.id))
-  );
+
+  // Wire up carousel controls
+  container.querySelectorAll(".carousel-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const sIdx     = btn.dataset.section;
+      const carousel = container.querySelector(`.char-carousel[data-section="${sIdx}"]`);
+      if (!carousel) return;
+      const card   = carousel.querySelector(".char-card");
+      const step   = card ? card.offsetWidth + 16 : 186; // card width + gap
+      const dir    = btn.classList.contains("carousel-next") ? 1 : -1;
+      carousel.scrollBy({ left: dir * step * 3, behavior: "smooth" });
+    });
+  });
+
+  // FIX 4: No edit/delete on cards — cards only show name, fandom, link
+  // (renderCharCard now omits those buttons)
 }
 
+// FIX 4: Simplified card — no edit/delete buttons
 function renderCharCard(c) {
   const cardImg = c.titleImage || c.refImage;
   return `
@@ -1488,16 +1488,13 @@ function renderCharCard(c) {
           <p class="char-card-name">${escHtml(c.name || "Unnamed")}</p>
         </a>
         <p class="char-card-fandom">${escHtml(c.fandom || "")}</p>
-        <div class="char-card-actions">
-          <button class="char-card-btn char-card-edit"   data-id="${escHtml(c.id)}">Edit</button>
-          <button class="char-card-btn char-card-delete" data-id="${escHtml(c.id)}">Delete</button>
-        </div>
       </div>
     </div>`;
 }
 
 // ══════════════════════════════════════════════════════════════════════
 // EDITOR MODAL
+// FIX 4: Delete button moved to bottom of edit window
 // ══════════════════════════════════════════════════════════════════════
 
 let editingId = null;
@@ -1535,6 +1532,13 @@ function openEditor(id) {
     (c?.customLinks || []).forEach(link => addCustomLinkRow(link));
   }
   document.getElementById("editor-title").textContent = c ? "Edit Character" : "New Character";
+
+  // Show/hide delete button in editor footer
+  const deleteBtn = document.getElementById("editor-delete-btn");
+  if (deleteBtn) {
+    deleteBtn.style.display = id ? "" : "none";
+  }
+
   overlay.classList.add("open");
   document.body.style.overflow = "hidden";
 }
@@ -1633,14 +1637,23 @@ async function handleFormSubmit(e) {
   closeEditor();
   const container = document.getElementById("char-sections-container");
   if (container) renderIndexSections(container);
+  // If on character page, reload the character data
+  if (document.getElementById("char-name")) {
+    loadCharacterPage();
+  }
   await saveCharacters(characters);
 }
 
 async function deleteCharacter(id) {
   if (!confirm("Delete this character? This cannot be undone.")) return;
   const characters = getCharacters().filter(c => c.id !== id);
+  closeEditor();
   const container  = document.getElementById("char-sections-container");
   if (container) renderIndexSections(container);
+  // If on character page, go back to index
+  if (document.getElementById("char-name")) {
+    window.location.href = "index.html";
+  }
   await saveCharacters(characters);
 }
 
@@ -1675,4 +1688,10 @@ document.addEventListener("DOMContentLoaded", function () {
     ?.addEventListener("submit", handleDetailsFormSubmit);
   document.getElementById("add-details-row")
     ?.addEventListener("click", () => addDetailsRow());
+
+  // FIX 4: Delete button in editor modal
+  document.getElementById("editor-delete-btn")
+    ?.addEventListener("click", () => {
+      if (editingId) deleteCharacter(editingId);
+    });
 });

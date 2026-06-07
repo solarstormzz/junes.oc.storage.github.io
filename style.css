@@ -1650,3 +1650,220 @@ footer {
   color: #7a6a52;
   border: 1px solid #d8d0c0;
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   PATCHES — append these to the bottom of style.css
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── FIX 1: Carousel (replaces .char-scroll-row) ── */
+
+.char-section-right {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-shrink: 0;
+}
+
+.carousel-controls {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.carousel-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  font-size: 1.1rem;
+  line-height: 1;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--ink-mid);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.carousel-btn:hover {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: #b5afa6;
+}
+
+.char-carousel-wrap {
+  overflow: hidden; /* hide scrollbar entirely */
+  position: relative;
+}
+
+.char-carousel {
+  display: flex;
+  flex-direction: row;
+  gap: 1rem;
+  overflow-x: auto;
+  padding-bottom: 0.75rem;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  /* hide scrollbar visually */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.char-carousel::-webkit-scrollbar {
+  display: none;
+}
+
+.char-carousel .char-card {
+  flex: 0 0 170px;
+  scroll-snap-align: start;
+}
+
+/* ── FIX 2: Masonry gallery (no gaps between images) ── */
+
+.gallery-grid {
+  /* Override the old grid with CSS columns for masonry */
+  display: block;
+  columns: 3 260px;
+  column-gap: 1.25rem;
+}
+
+@media (max-width: 800px) {
+  .gallery-grid { columns: 2 200px; }
+}
+
+@media (max-width: 480px) {
+  .gallery-grid { columns: 1; }
+}
+
+.gallery-item {
+  break-inside: avoid;
+  margin-bottom: 1.25rem;
+  /* Reset the old flex column so images flow naturally */
+  display: flex;
+  flex-direction: column;
+}
+
+.gallery-img-wrap img {
+  width: 100%;
+  height: auto;
+  display: block;
+  object-fit: contain; /* keep full image, no crop */
+}
+
+/* ── FIX 4: Remove card actions area entirely (no edit/delete on cards) ── */
+
+.char-card-actions {
+  display: none;
+}
+
+/* ── FIX 4: Delete button in editor footer ── */
+
+.editor-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding-top: 0.5rem;
+}
+
+.editor-delete-zone {
+  margin-right: auto; /* push delete to the left, save/cancel to the right */
+}
+
+.editor-btn-delete {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.45rem 1rem;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  background: transparent;
+  border: 1px solid #d0a0a0;
+  color: #a05050;
+}
+
+.editor-btn-delete:hover {
+  background: #f5e8e8;
+  border-color: #b07070;
+}
+
+/*
+  style.css PATCH — details editor modal scroll fix
+  ==================================================
+  Find the "FIX 5" section at the bottom of your style.css and
+  REPLACE everything from the #details-editor-overlay block onward
+  with the rules below. If you already have a .details-preset-grid
+  or #details-editor-rows rule anywhere else in style.css, remove
+  those too — these are the only ones that should exist.
+*/
+
+/* ── Details editor: proper fixed-height flex layout ── */
+
+/* Modal: capped, flex column so the form can fill it */
+#details-editor-overlay .editor-modal {
+  max-height: calc(100vh - 4rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Form fills remaining modal height; the form itself does NOT scroll */
+#details-editor-overlay .editor-form {
+  flex: 1;
+  min-height: 0;        /* lets flex child shrink past content size */
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.25rem 1.5rem;
+  max-height: none;     /* override global .editor-form cap */
+}
+
+/* Hint line: never grows or shrinks */
+#details-editor-overlay .details-editor-hint {
+  flex-shrink: 0;
+}
+
+/* Chips section: fixed size, never compressed when rows grow */
+#details-editor-overlay .details-preset-section {
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+/* Chips area: fixed 2-row height, scrolls internally */
+.details-preset-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0.6rem 0.9rem;
+  max-height: 100px;
+  overflow-y: auto;
+}
+
+/* Fields section: the ONLY part that grows to fill space and scrolls */
+.details-custom-section {
+  flex: 1;              /* takes all leftover vertical space */
+  min-height: 0;        /* critical — without this flex ignores overflow */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Rows list: fills the fields section entirely, scrolls when full */
+#details-editor-rows {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  max-height: none;     /* flex parent controls height, not a hard cap */
+  padding: 0.25rem 0;
+}
+
+/* Add-field button + action bar: pinned at bottom, never grow */
+#details-editor-overlay .add-gallery-btn,
+#details-editor-overlay .editor-actions {
+  flex-shrink: 0;
+}
+
