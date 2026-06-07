@@ -1533,3 +1533,120 @@ footer {
   color: #a05050;
   background: #f5e8e8;
 }
+
+/* ══════════════════════════════════════════
+   FAMILY TREE — sidebar member list
+══════════════════════════════════════════ */
+
+.tree-sb-members {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.tree-sb-member {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.tree-sb-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  background: var(--card);
+}
+
+.tree-sb-avatar-placeholder {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--card);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 0.95rem;
+  color: var(--ink-light);
+  flex-shrink: 0;
+}
+
+.tree-sb-member-info {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.tree-sb-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.tree-sb-name {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tree-sb-name-link {
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.tree-sb-name-link:hover {
+  color: var(--ink-mid);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.tree-sb-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.tree-sb-reltype {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.68rem;
+  color: var(--ink-light);
+  font-style: italic;
+}
+
+.tree-sb-add-rel {
+  background: none;
+  border: none;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.67rem;
+  color: var(--ink-light);
+  font-style: italic;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-style: dashed;
+  transition: color 0.15s;
+}
+
+.tree-sb-add-rel:hover {
+  color: var(--ink-mid);
+}
+
+/* Role colour chips — shared between default + edit sidebar */
+.tree-sb-role--sibling {
+  background: #f0eee8;
+  color: #7a6a52;
+  border: 1px solid #d8d0c0;
+}

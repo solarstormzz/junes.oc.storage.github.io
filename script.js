@@ -212,9 +212,7 @@ function loadCharacterPage() {
   setText("char-occupation", character.occupation);
   setFormattedText("char-appearance", character.appearance);
 
-  // Render all links (fixed + custom)
   renderAllLinks(character.links || {}, character.customLinks || []);
-
   renderBackgroundHistory(character.background, character.history);
   setFormattedText("char-overview", character.overview);
 
@@ -227,33 +225,22 @@ function loadCharacterPage() {
     refWrap.style.display = "none";
   }
 
-  const titleImg = document.querySelector(".char-title-img");
-  if (character.titleImage && titleImg) {
-    titleImg.src = character.titleImage;
-    titleImg.style.display = "block";
-  } else if (titleImg) {
-    titleImg.style.display = "none";
-  }
-
   renderGallery(character.gallery || [], id);
   document.title = (character.name || "Character") + " — Character Sheet";
 
-  initOverviewTabs();
+  initOverviewTabs(id);
   renderRelationships(character.relationships || [], id);
 
-  const editBtn = document.getElementById("char-page-edit-btn");
-  if (editBtn) editBtn.addEventListener("click", () => openCharPageEditor(id));
-
-  const editRelBtn = document.getElementById("edit-relationships-btn");
-  if (editRelBtn) editRelBtn.addEventListener("click", () => openRelationshipEditor(id));
+  document.getElementById("char-page-edit-btn")
+    ?.addEventListener("click", () => openCharPageEditor(id));
+  document.getElementById("edit-relationships-btn")
+    ?.addEventListener("click", () => openRelationshipEditor(id));
 }
 
-// Render fixed + custom links into #char-links-list
 function renderAllLinks(links, customLinks) {
   const list = document.getElementById("char-links-list");
   if (!list) return;
   list.innerHTML = "";
-
   const fixed = [
     { href: links.unvale,       label: "Unvale" },
     { href: links.characterhub, label: "CharacterHub" },
@@ -266,7 +253,6 @@ function renderAllLinks(links, customLinks) {
     li.innerHTML = `<a href="${escHtml(href)}" target="_blank" rel="noopener">${escHtml(label)}</a>`;
     list.appendChild(li);
   });
-
   (customLinks || []).forEach(({ url, title }) => {
     if (!url) return;
     const li = document.createElement("li");
@@ -275,36 +261,609 @@ function renderAllLinks(links, customLinks) {
   });
 }
 
-// ── Overview / Relationships tabs ──────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════
+// OVERVIEW / RELATIONSHIPS / TREE TABS
+// ══════════════════════════════════════════════════════════════════════
 
-function initOverviewTabs() {
-  const overviewTab   = document.getElementById("tab-overview");
-  const relTab        = document.getElementById("tab-relationships");
-  const overviewPanel = document.getElementById("panel-overview");
-  const relPanel      = document.getElementById("panel-relationships");
-  const editRelBtn    = document.getElementById("edit-relationships-btn");
-
-  if (!overviewTab || !relTab) return;
+function initOverviewTabs(charId) {
+  const tabs = {
+    overview:      document.getElementById("tab-overview"),
+    relationships: document.getElementById("tab-relationships"),
+    tree:          document.getElementById("tab-tree"),
+  };
+  const panels = {
+    overview:      document.getElementById("panel-overview"),
+    relationships: document.getElementById("panel-relationships"),
+    tree:          document.getElementById("panel-tree"),
+  };
+  const editRelBtn = document.getElementById("edit-relationships-btn");
   if (editRelBtn) editRelBtn.style.display = "none";
 
-  overviewTab.addEventListener("click", () => {
-    overviewTab.classList.add("active");
-    relTab.classList.remove("active");
-    overviewPanel.style.display = "";
-    relPanel.style.display = "none";
-    if (editRelBtn) editRelBtn.style.display = "none";
-  });
+  function activate(key) {
+    Object.values(tabs).forEach(t => t && t.classList.remove("active"));
+    Object.values(panels).forEach(p => p && (p.style.display = "none"));
+    if (tabs[key])   tabs[key].classList.add("active");
+    if (panels[key]) panels[key].style.display = "";
+    if (editRelBtn)  editRelBtn.style.display = key === "relationships" ? "" : "none";
+    if (key === "tree") renderTree(charId);
+  }
 
-  relTab.addEventListener("click", () => {
-    relTab.classList.add("active");
-    overviewTab.classList.remove("active");
-    relPanel.style.display = "";
-    overviewPanel.style.display = "none";
-    if (editRelBtn) editRelBtn.style.display = "";
+  tabs.overview?.addEventListener("click",      () => activate("overview"));
+  tabs.relationships?.addEventListener("click", () => activate("relationships"));
+  tabs.tree?.addEventListener("click",          () => activate("tree"));
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// FAMILY TREE
+// ══════════════════════════════════════════════════════════════════════
+
+const T = {
+  NODE_R:    30,
+  GAP_H:     56,
+  ROW_H:    110,
+  CANVAS_W: 680,
+};
+
+function getTreeMap(character) {
+  const raw = character.treeData || {};
+  const map = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (v && typeof v === "object" && !Array.isArray(v)) {
+      map[k] = {
+        parents:  Array.isArray(v.parents)  ? v.parents  : [],
+        partners: Array.isArray(v.partners) ? v.partners : [],
+        children: Array.isArray(v.children) ? v.children : [],
+      };
+    }
+  }
+  return map;
+}
+
+async function saveTreeMap(charId, map) {
+  const chars = getCharacters();
+  const idx   = chars.findIndex(c => c.id === charId);
+  if (idx === -1) return;
+  chars[idx].treeData = map;
+  await saveCharacters(chars);
+}
+
+// ── State ─────────────────────────────────────────────────────────────
+let _treeCharId   = null;
+let _treeEditMode = false;
+
+function renderTree(charId) {
+  _treeCharId = charId;
+  const panel = document.getElementById("panel-tree");
+  if (!panel) return;
+
+  panel.innerHTML = `
+    <div class="tree-root" id="tree-root">
+      <div class="tree-topbar">
+        <label class="tree-edit-label-wrap">
+          <span class="tree-edit-label">Edit mode</span>
+          <label class="tree-toggle-track">
+            <input type="checkbox" id="tree-edit-toggle">
+            <span class="tree-toggle-thumb"></span>
+          </label>
+        </label>
+        <span class="tree-edit-hint" id="tree-edit-hint">Click any node to edit its connections</span>
+      </div>
+      <div class="tree-body" id="tree-body">
+        <div class="tree-sidebar-wrap" id="tree-sidebar-wrap">
+          <!-- sidebar content injected here -->
+        </div>
+        <div class="tree-canvas-wrap" id="tree-canvas-wrap">
+          <svg id="tree-svg" class="tree-svg" xmlns="http://www.w3.org/2000/svg" width="100%"></svg>
+        </div>
+      </div>
+    </div>
+  `;
+
+  _treeEditMode = false;
+  showTreeDefaultSidebar(charId);
+  redrawTree(charId);
+
+  document.getElementById("tree-edit-toggle").addEventListener("change", function() {
+    _treeEditMode = this.checked;
+    const hint = document.getElementById("tree-edit-hint");
+    if (hint) hint.style.opacity = _treeEditMode ? "1" : "0";
+    if (!_treeEditMode) showTreeDefaultSidebar(charId);
+    redrawTree(charId);
   });
 }
 
-// ── Shared: sentence boundary ─────────────────────────────────────────
+// ── Default sidebar: member list with relationship types ──────────────
+function showTreeDefaultSidebar(charId) {
+  const wrap = document.getElementById("tree-sidebar-wrap");
+  if (!wrap) return;
+  const chars     = getCharacters();
+  const character = chars.find(c => c.id === charId);
+  if (!character) return;
+  const map      = getTreeMap(character);
+  const focalKey = character.name;
+
+  // Build a lookup of relationship types keyed by name (lowercase)
+  const relMap = {};
+  (character.relationships || []).forEach(r => {
+    if (r.name) relMap[r.name.toLowerCase().trim()] = r.type || "";
+  });
+
+  const focalData = map[focalKey] || { parents: [], partners: [], children: [] };
+
+  // Assign tree roles relative to the focal character
+  const treeRoles = {};
+
+  function assignRole(names, role) {
+    (names || []).forEach(n => {
+      if (n !== focalKey && !treeRoles[n]) treeRoles[n] = role;
+    });
+  }
+
+  // Direct connections
+  assignRole(focalData.parents,  "Parent");
+  assignRole(focalData.partners, "Partner");
+  assignRole(focalData.children, "Child");
+
+  // Extended family
+  Object.entries(map).forEach(([nodeName, nd]) => {
+    if (nodeName === focalKey) return;
+
+    // Siblings: share a parent with focal
+    if ((nd.parents || []).some(p => (focalData.parents || []).includes(p))) {
+      if (!treeRoles[nodeName]) treeRoles[nodeName] = "Sibling";
+    }
+
+    // Grandparents: parents of focal's parents
+    (focalData.parents || []).forEach(parent => {
+      const parentData = map[parent];
+      if (!parentData) return;
+      if ((parentData.parents || []).includes(nodeName) && !treeRoles[nodeName]) {
+        treeRoles[nodeName] = "Grandparent";
+      }
+    });
+
+    // Grandchildren: children of focal's children
+    (focalData.children || []).forEach(child => {
+      const childData = map[child];
+      if (!childData) return;
+      if ((childData.children || []).includes(nodeName) && !treeRoles[nodeName]) {
+        treeRoles[nodeName] = "Grandchild";
+      }
+    });
+
+    // Fallback for any remaining placed node
+    if (!treeRoles[nodeName] && map[nodeName]) treeRoles[nodeName] = "Family";
+  });
+
+  const entries = Object.entries(treeRoles);
+
+  if (!entries.length) {
+    wrap.innerHTML = `
+      <div class="tree-sidebar">
+        <p class="tree-sb-title">Family Tree</p>
+        <p class="tree-sb-empty">No one on the tree yet.<br>Turn on Edit mode and click the focal node to start.</p>
+      </div>`;
+    return;
+  }
+
+  const roleOrder = ["Parent", "Grandparent", "Partner", "Sibling", "Child", "Grandchild", "Family"];
+  entries.sort((a, b) => {
+    const ai = roleOrder.indexOf(a[1]);
+    const bi = roleOrder.indexOf(b[1]);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi) || a[0].localeCompare(b[0]);
+  });
+
+  const rows = entries.map(([name, treeRole]) => {
+    const relType = relMap[name.toLowerCase().trim()];
+    const otherChar = chars.find(c =>
+      c.id !== charId &&
+      (c.name || "").toLowerCase().trim() === name.toLowerCase().trim()
+    );
+    const img  = otherChar ? (otherChar.titleImage || otherChar.refImage || "") : "";
+    const href = otherChar ? `character.html?id=${escHtml(otherChar.id)}` : "";
+
+    const avatarHtml = img
+      ? `<img src="${escHtml(img)}" class="tree-sb-avatar" alt="" />`
+      : `<div class="tree-sb-avatar tree-sb-avatar-placeholder">${escHtml((name[0] || "?").toUpperCase())}</div>`;
+
+    const nameHtml = href
+      ? `<a href="${escHtml(href)}" class="tree-sb-name tree-sb-name-link">${escHtml(name)}</a>`
+      : `<span class="tree-sb-name">${escHtml(name)}</span>`;
+
+    const roleClass = {
+      Parent:      "tree-sb-role--parent",
+      Grandparent: "tree-sb-role--parent",
+      Partner:     "tree-sb-role--partner",
+      Child:       "tree-sb-role--child",
+      Grandchild:  "tree-sb-role--child",
+      Sibling:     "tree-sb-role--sibling",
+      Family:      "tree-sb-role--sibling",
+    }[treeRole] || "tree-sb-role--sibling";
+
+    return `
+      <div class="tree-sb-member">
+        ${avatarHtml}
+        <div class="tree-sb-member-info">
+          <div class="tree-sb-name-row">${nameHtml}</div>
+          <div class="tree-sb-meta-row">
+            <span class="tree-sb-role ${roleClass}">${escHtml(treeRole)}</span>
+            ${relType
+              ? `<span class="tree-sb-reltype">${escHtml(relType)}</span>`
+              : `<button class="tree-sb-add-rel" data-name="${escHtml(name)}" title="Add relationship type">+ add rel. type</button>`
+            }
+          </div>
+        </div>
+      </div>`;
+  }).join("");
+
+  wrap.innerHTML = `
+    <div class="tree-sidebar">
+      <p class="tree-sb-title">Family Tree</p>
+      <div class="tree-sb-members">${rows}</div>
+    </div>`;
+
+  // Wire up "add rel. type" buttons → open relationship editor with name pre-filled
+  wrap.querySelectorAll(".tree-sb-add-rel").forEach(btn => {
+    btn.addEventListener("click", () => {
+      openRelationshipEditor(charId);
+      setTimeout(() => {
+        const name = btn.dataset.name;
+        const rows = document.querySelectorAll("#rel-editor-rows .rel-editor-row");
+        let found = false;
+        rows.forEach(tr => {
+          const inp = tr.querySelector(".rel-r-name");
+          if (inp && inp.value.trim().toLowerCase() === name.toLowerCase()) found = true;
+        });
+        if (!found) {
+          addRelRow({ name });
+          const tbody = document.getElementById("rel-editor-rows");
+          if (tbody) tbody.lastElementChild?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+      }, 80);
+    });
+  });
+}
+
+// ── Node edit sidebar ─────────────────────────────────────────────────
+function showNodeEditSidebar(charId, nodeName) {
+  const wrap = document.getElementById("tree-sidebar-wrap");
+  if (!wrap) return;
+  const chars     = getCharacters();
+  const character = chars.find(c => c.id === charId);
+  if (!character) return;
+  const map      = getTreeMap(character);
+  const nodeData = map[nodeName] || { parents: [], partners: [], children: [] };
+
+  const suggestions = (character.relationships || []).map(r => r.name).filter(Boolean);
+
+  function roleSection(roleKey, label, colorClass) {
+    const members = nodeData[roleKey] || [];
+    const pills   = members.map(name => `
+      <span class="tree-pill">
+        ${escHtml(name)}
+        <button class="tree-pill-rm" data-role="${roleKey}" data-name="${escHtml(name)}" title="Remove">✕</button>
+      </span>`).join("");
+
+    return `
+      <div class="tree-sb-section">
+        <p class="tree-sb-role ${colorClass}">${label}</p>
+        <div class="tree-pills" id="pills-${roleKey}">${pills || '<span class="tree-pill-empty">None</span>'}</div>
+        <div class="tree-add-row">
+          <input type="text" class="tree-add-input" id="add-input-${roleKey}"
+            placeholder="Add name…" list="tree-suggestions-${roleKey}" autocomplete="off"/>
+          <datalist id="tree-suggestions-${roleKey}">
+            ${suggestions.map(s => `<option value="${escHtml(s)}">`).join("")}
+          </datalist>
+          <button class="tree-add-btn" data-role="${roleKey}">+</button>
+        </div>
+      </div>`;
+  }
+
+  const isNodeOnTree = !!map[nodeName];
+  const isFocal = nodeName === character.name;
+
+  wrap.innerHTML = `
+    <div class="tree-sidebar tree-sidebar--edit">
+      <div class="tree-sb-header">
+        <span class="tree-sb-node-name">${escHtml(nodeName)}</span>
+        <button class="tree-sb-back" id="tree-sb-back" title="Back">←</button>
+      </div>
+      ${roleSection("parents",  "Parents",  "tree-sb-role--parent")}
+      ${roleSection("partners", "Partners", "tree-sb-role--partner")}
+      ${roleSection("children", "Children", "tree-sb-role--child")}
+      ${!isFocal && !isNodeOnTree ? `<p class="tree-sb-hint" style="margin-top:.5rem">This node isn't on the tree yet. Add connections above to place it.</p>` : ""}
+    </div>
+  `;
+
+  document.getElementById("tree-sb-back").addEventListener("click", () => {
+    showTreeDefaultSidebar(charId);
+  });
+
+  wrap.querySelectorAll(".tree-pill-rm").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const role = btn.dataset.role;
+      const name = btn.dataset.name;
+      const chars2   = getCharacters();
+      const char2    = chars2.find(c => c.id === charId);
+      const map2     = getTreeMap(char2);
+      if (!map2[nodeName]) return;
+      map2[nodeName][role] = map2[nodeName][role].filter(n => n !== name);
+      if (nodeName !== char2.name) {
+        const nd = map2[nodeName];
+        if (!nd.parents.length && !nd.partners.length && !nd.children.length) {
+          delete map2[nodeName];
+        }
+      }
+      await saveTreeMap(charId, map2);
+      showNodeEditSidebar(charId, nodeName);
+      redrawTree(charId);
+    });
+  });
+
+  wrap.querySelectorAll(".tree-add-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const role  = btn.dataset.role;
+      const input = document.getElementById(`add-input-${role}`);
+      const name  = (input?.value || "").trim();
+      if (!name) return;
+      const chars2 = getCharacters();
+      const char2  = chars2.find(c => c.id === charId);
+      const map2   = getTreeMap(char2);
+      if (!map2[nodeName]) map2[nodeName] = { parents: [], partners: [], children: [] };
+      if (!map2[nodeName][role].includes(name)) {
+        map2[nodeName][role].push(name);
+      }
+      if (!map2[name]) map2[name] = { parents: [], partners: [], children: [] };
+      await saveTreeMap(charId, map2);
+      if (input) input.value = "";
+      showNodeEditSidebar(charId, nodeName);
+      redrawTree(charId);
+    });
+  });
+
+  ["parents","partners","children"].forEach(role => {
+    document.getElementById(`add-input-${role}`)?.addEventListener("keydown", e => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        wrap.querySelector(`.tree-add-btn[data-role="${role}"]`)?.click();
+      }
+    });
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// TREE LAYOUT + SVG DRAWING
+// ══════════════════════════════════════════════════════════════════════
+
+function redrawTree(charId) {
+  const svg = document.getElementById("tree-svg");
+  if (!svg) return;
+  const chars     = getCharacters();
+  const character = chars.find(c => c.id === charId);
+  if (!character) return;
+
+  const map      = getTreeMap(character);
+  const focalKey = character.name;
+
+  const placed   = new Map();
+  const rowSlots = new Map();
+
+  function ensureRow(row) {
+    if (!rowSlots.has(row)) rowSlots.set(row, []);
+  }
+
+  function placeNode(name, row) {
+    if (placed.has(name)) return;
+    ensureRow(row);
+    rowSlots.get(row).push(name);
+    placed.set(name, { row });
+  }
+
+  placeNode(focalKey, 0);
+
+  const queue = [{ name: focalKey, row: 0 }];
+  const visited = new Set([focalKey]);
+
+  while (queue.length) {
+    const { name, row } = queue.shift();
+    const nd = map[name];
+    if (!nd) continue;
+
+    (nd.parents || []).forEach(p => {
+      if (!visited.has(p)) {
+        visited.add(p);
+        placeNode(p, row - 1);
+        queue.push({ name: p, row: row - 1 });
+      }
+    });
+
+    (nd.children || []).forEach(c => {
+      if (!visited.has(c)) {
+        visited.add(c);
+        placeNode(c, row + 1);
+        queue.push({ name: c, row: row + 1 });
+      }
+    });
+
+    (nd.partners || []).forEach(p => {
+      if (!visited.has(p)) {
+        visited.add(p);
+        placeNode(p, row);
+      }
+    });
+  }
+
+  const nodePos = new Map();
+  const rowNums = Array.from(rowSlots.keys()).sort((a,b) => a-b);
+  const minRow  = rowNums[0] ?? 0;
+  const maxRow  = rowNums[rowNums.length - 1] ?? 0;
+
+  const STEP  = T.NODE_R * 2 + T.GAP_H;
+  const CX    = T.CANVAS_W / 2;
+  const Y_TOP = 60;
+
+  rowNums.forEach(row => {
+    const names  = rowSlots.get(row);
+    const count  = names.length;
+    const totalW = (count - 1) * STEP;
+    const startX = CX - totalW / 2;
+    const y      = Y_TOP + (row - minRow) * T.ROW_H;
+    names.forEach((name, i) => {
+      nodePos.set(name, { x: startX + i * STEP, y });
+    });
+  });
+
+  const svgH = Y_TOP + (maxRow - minRow) * T.ROW_H + T.NODE_R * 2 + 50;
+
+  let clipIdN = 0;
+  const mkCid = () => `tc${++clipIdN}_${Date.now()}`;
+
+  let defs   = `<defs>`;
+  let conns  = ``;
+  let nodes_ = ``;
+
+  function getImg(name) {
+    const m = chars.find(c => (c.name||"").toLowerCase().trim() === (name||"").toLowerCase().trim());
+    return m ? (m.titleImage || m.refImage || "") : "";
+  }
+
+  function getHref(name) {
+    const m = chars.find(c =>
+      c.id !== charId &&
+      (c.name||"").toLowerCase().trim() === (name||"").toLowerCase().trim()
+    );
+    return m ? `character.html?id=${m.id}` : "";
+  }
+
+  function drawNode(name, x, y, isFocal) {
+    const r      = isFocal ? T.NODE_R + 4 : T.NODE_R;
+    const cid    = mkCid();
+    const img    = getImg(name);
+    const href   = getHref(name);
+    const init   = (name[0] || "?").toUpperCase();
+    const label  = name.length > 13 ? name.slice(0,12) + "…" : name;
+
+    defs += `<clipPath id="${cid}"><circle cx="${x}" cy="${y}" r="${r}"/></clipPath>`;
+
+    const imgEl = img
+      ? `<image href="${escHtml(img)}" x="${x-r}" y="${y-r}" width="${r*2}" height="${r*2}" clip-path="url(#${cid})" preserveAspectRatio="xMidYMid slice"/>`
+      : `<text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="central"
+           font-family="Cormorant Garamond,serif" font-size="${Math.round(r*0.85)}"
+           fill="var(--ink-light)">${escHtml(init)}</text>`;
+
+    const ring      = isFocal ? `stroke="var(--ink)" stroke-width="2.5"` : `stroke="var(--border)" stroke-width="1.5"`;
+    const cursor    = _treeEditMode ? `style="cursor:pointer"` : (href ? `style="cursor:pointer"` : "");
+    const dataEdit  = _treeEditMode ? `data-editnode="${escHtml(name)}"` : "";
+    const dataHref  = (!_treeEditMode && href) ? `data-href="${escHtml(href)}"` : "";
+
+    const badge = _treeEditMode ? `
+      <circle cx="${x+r-4}" cy="${y-r+4}" r="10" fill="var(--card)" stroke="var(--border)" stroke-width="1"/>
+      <text x="${x+r-4}" y="${y-r+4}" text-anchor="middle" dominant-baseline="central"
+        font-family="DM Sans,sans-serif" font-size="11" fill="var(--ink-mid)">✎</text>` : "";
+
+    return `
+      <g class="tree-node" ${cursor} ${dataEdit} ${dataHref}>
+        <circle cx="${x}" cy="${y}" r="${r}" fill="var(--card)" ${ring}/>
+        ${imgEl}
+        ${badge}
+        <text x="${x}" y="${y+r+18}" text-anchor="middle"
+          font-family="DM Sans,sans-serif" font-size="12" font-weight="${isFocal ? '600' : '400'}"
+          fill="${isFocal ? 'var(--ink)' : 'var(--ink-mid)'}">${escHtml(label)}</text>
+      </g>`;
+  }
+
+  function drawConn(x1, y1, x2, y2, type) {
+    if (type === "partner") {
+      const mx = (x1 + x2) / 2;
+      const my = (y1 + y2) / 2;
+      return `
+        <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="tree-conn tree-conn-partner"/>
+        <text x="${mx}" y="${my - 7}" text-anchor="middle" font-size="13"
+          font-family="serif" fill="var(--ink-light)">♥</text>`;
+    }
+    const midy = (y1 + y2) / 2;
+    return `<path d="M${x1} ${y1} C${x1} ${midy},${x2} ${midy},${x2} ${y2}"
+      fill="none" class="tree-conn"/>`;
+  }
+
+  const drawnConns = new Set();
+  function connKey(a, b) { return [a,b].sort().join("|||"); }
+
+  placed.forEach((_, name) => {
+    const nd  = map[name];
+    const pos = nodePos.get(name);
+    if (!nd || !pos) return;
+
+    (nd.parents || []).forEach(pname => {
+      const ppos = nodePos.get(pname);
+      if (!ppos) return;
+      const k = connKey(name, pname);
+      if (drawnConns.has(k)) return;
+      drawnConns.add(k);
+      conns += drawConn(ppos.x, ppos.y + T.NODE_R, pos.x, pos.y - T.NODE_R, "parent");
+    });
+
+    (nd.partners || []).forEach(pname => {
+      const ppos = nodePos.get(pname);
+      if (!ppos) return;
+      const k = connKey(name, pname);
+      if (drawnConns.has(k)) return;
+      drawnConns.add(k);
+      const lx = Math.min(pos.x, ppos.x) + T.NODE_R;
+      const rx = Math.max(pos.x, ppos.x) - T.NODE_R;
+      const y  = pos.y;
+      conns += drawConn(lx, y, rx, y, "partner");
+    });
+
+    (nd.children || []).forEach(cname => {
+      const cpos = nodePos.get(cname);
+      if (!cpos) return;
+      const k = connKey(name, cname);
+      if (drawnConns.has(k)) return;
+      drawnConns.add(k);
+      conns += drawConn(pos.x, pos.y + T.NODE_R, cpos.x, cpos.y - T.NODE_R, "child");
+    });
+  });
+
+  placed.forEach((_, name) => {
+    const pos = nodePos.get(name);
+    if (!pos) return;
+    if (name !== focalKey) {
+      nodes_ += drawNode(name, pos.x, pos.y, false);
+    }
+  });
+  const fpos = nodePos.get(focalKey);
+  if (fpos) nodes_ += drawNode(focalKey, fpos.x, fpos.y, true);
+
+  defs += `</defs>`;
+
+  const hasContent = placed.size > 1;
+  const emptyHint  = !hasContent ? `
+    <text x="${CX}" y="${Y_TOP + T.NODE_R + 44}" text-anchor="middle"
+      font-family="DM Sans,sans-serif" font-size="13" fill="var(--ink-light)">
+      Turn on Edit mode and click this node to add family members
+    </text>` : "";
+
+  svg.setAttribute("viewBox", `0 0 ${T.CANVAS_W} ${svgH}`);
+  svg.innerHTML = defs + conns + nodes_ + emptyHint;
+
+  svg.querySelectorAll("[data-href]").forEach(el => {
+    el.addEventListener("click", () => window.location.href = el.getAttribute("data-href"));
+  });
+
+  if (_treeEditMode) {
+    svg.querySelectorAll("[data-editnode]").forEach(el => {
+      el.addEventListener("click", () => {
+        const name = el.getAttribute("data-editnode");
+        showNodeEditSidebar(_treeCharId, name);
+      });
+    });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// SHARED: sentence boundary + expand/collapse
+// ══════════════════════════════════════════════════════════════════════
 
 function findSentenceBoundary(text, limit) {
   const sentenceEnd = /[.!?]/;
@@ -321,34 +880,22 @@ function findSentenceBoundary(text, limit) {
   return cut;
 }
 
-// ── Shared: wire up an inline expand/collapse block ───────────────────
-// Elements expected inside `block`:
-//   .ex-visible   — always-shown text
-//   .ex-ellipsis  — the " …" shown when collapsed
-//   .ex-readmore  — "read more" link, shown when collapsed
-//   .ex-hidden    — extra text, hidden when collapsed
-//   .ex-collapse  — "collapse" link, shown when expanded
 function wireExpandable(block) {
-  const ellipsis  = block.querySelector(".ex-ellipsis");
-  const readmore  = block.querySelector(".ex-readmore");
-  const hidden    = block.querySelector(".ex-hidden");
-  const collapse  = block.querySelector(".ex-collapse");
-
-  // Initial state: collapsed
+  const ellipsis = block.querySelector(".ex-ellipsis");
+  const readmore = block.querySelector(".ex-readmore");
+  const hidden   = block.querySelector(".ex-hidden");
+  const collapse = block.querySelector(".ex-collapse");
   hidden.style.display   = "none";
   collapse.style.display = "none";
-
   block.querySelectorAll(".expandable-link").forEach(link => {
     link.addEventListener("click", () => {
       const isExpanded = hidden.style.display !== "none";
       if (!isExpanded) {
-        // expand
         hidden.style.display   = "inline";
         collapse.style.display = "inline";
         ellipsis.style.display = "none";
         readmore.style.display = "none";
       } else {
-        // collapse
         hidden.style.display   = "none";
         collapse.style.display = "none";
         ellipsis.style.display = "inline";
@@ -359,7 +906,9 @@ function wireExpandable(block) {
   });
 }
 
-// ── Relationships rendering ───────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════
+// RELATIONSHIPS
+// ══════════════════════════════════════════════════════════════════════
 
 const REL_TRUNCATE = 180;
 
@@ -376,28 +925,23 @@ function renderRelationships(relationships, currentId) {
   }
 
   const allChars = getCharacters();
-
   const cards = relationships.map(rel => {
     const match = allChars.find(c =>
       c.id !== currentId &&
       (c.name || "").toLowerCase().trim() === (rel.name || "").toLowerCase().trim()
     );
-
     const nameHtml = match
       ? `<a href="character.html?id=${escHtml(match.id)}" class="rel-name rel-name-link">${escHtml(rel.name || "Unknown")}</a>`
       : rel.link
         ? `<a href="${escHtml(rel.link)}" class="rel-name rel-name-link" target="_blank" rel="noopener">${escHtml(rel.name || "Unknown")}</a>`
         : `<span class="rel-name">${escHtml(rel.name || "Unknown")}</span>`;
-
     const canonLabel = rel.canon === "canon"
       ? `<span class="rel-canon rel-canon--yes">canon</span>`
       : rel.canon === "noncanon"
         ? `<span class="rel-canon rel-canon--no">OC</span>`
         : "";
-
     const desc = rel.description || "";
     let descHtml = "";
-
     if (!desc) {
       descHtml = "";
     } else if (desc.length <= REL_TRUNCATE) {
@@ -415,11 +959,9 @@ function renderRelationships(relationships, currentId) {
           --> <span class="ex-collapse"><span class="expandable-link" data-action="collapse">collapse</span></span>
         </div>`;
     }
-
     const avatarHtml = match && (match.titleImage || match.refImage)
       ? `<img src="${escHtml(match.titleImage || match.refImage)}" class="rel-avatar" alt="" />`
       : `<div class="rel-avatar rel-avatar-placeholder">${escHtml((rel.name?.[0] || "?").toUpperCase())}</div>`;
-
     return `
       <div class="rel-card">
         <div class="rel-card-header">
@@ -434,12 +976,11 @@ function renderRelationships(relationships, currentId) {
   }).join("");
 
   panel.innerHTML = `<div class="rel-grid">${cards}</div>`;
-
   panel.querySelectorAll(".ex-block").forEach(block => wireExpandable(block));
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// RELATIONSHIP EDITOR
+// RELATIONSHIP EDITOR MODAL
 // ══════════════════════════════════════════════════════════════════════
 
 let relEditingCharId = null;
@@ -510,7 +1051,6 @@ async function handleRelFormSubmit(e) {
     link:        (tr.querySelector(".rel-r-link")?.value  || "").trim(),
     description: (tr.querySelector(".rel-r-desc")?.value  || "").trim(),
   })).filter(r => r.name);
-
   const characters = getCharacters();
   const idx = characters.findIndex(c => c.id === relEditingCharId);
   if (idx !== -1) {
@@ -522,29 +1062,27 @@ async function handleRelFormSubmit(e) {
   await saveCharacters(characters);
 }
 
-// ── Background / History ──────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════
+// BACKGROUND / HISTORY
+// ══════════════════════════════════════════════════════════════════════
 
 const TRUNCATE_CHARS = 2000;
 
 function renderBackgroundHistory(background, history) {
   const container = document.getElementById("char-bg-history-container");
   if (!container) return;
-
   let fullText = background || "";
   if (history && !fullText.includes(history)) {
     fullText = [fullText, history].filter(Boolean).join("\n\n");
   }
   if (!fullText) { container.innerHTML = ""; return; }
-
   if (fullText.length <= TRUNCATE_CHARS) {
     container.innerHTML = `<p class="char-body char-formatted">${escHtml(fullText)}</p>`;
     return;
   }
-
   const cutoff  = findSentenceBoundary(fullText, TRUNCATE_CHARS);
   const visible = fullText.slice(0, cutoff).trimEnd();
   const rest    = fullText.slice(cutoff).trimStart();
-
   container.innerHTML = `
     <div class="ex-block char-body char-formatted">
       <span class="ex-visible">${escHtml(visible)}</span><!--
@@ -554,7 +1092,6 @@ function renderBackgroundHistory(background, history) {
       --> <span class="ex-collapse"><span class="expandable-link" data-action="collapse">collapse</span></span>
     </div>
   `;
-
   container.querySelectorAll(".ex-block").forEach(block => wireExpandable(block));
 }
 
@@ -570,28 +1107,16 @@ function setFormattedText(id, value) {
   el.classList.add("char-formatted");
 }
 
-function setLink(anchorId, liId, href, label) {
-  const anchor = document.getElementById(anchorId);
-  const li     = document.getElementById(liId);
-  if (!anchor) return;
-  if (href) {
-    anchor.href = href; anchor.textContent = label;
-    if (li) li.style.display = "";
-  } else {
-    if (li) li.style.display = "none";
-  }
-}
-
-// ── Gallery ───────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════
+// GALLERY
+// ══════════════════════════════════════════════════════════════════════
 
 function renderGallery(ownGallery, currentCharId) {
   const grid = document.querySelector(".gallery-grid");
   if (!grid) return;
-
   const allChars    = getCharacters();
   const currentChar = allChars.find(c => c.id === currentCharId);
   const currentName = (currentChar?.name || "").toLowerCase().trim();
-
   const taggedImages = [];
   allChars.forEach(c => {
     if (c.id === currentCharId) return;
@@ -602,17 +1127,12 @@ function renderGallery(ownGallery, currentCharId) {
       }
     });
   });
-
   const combined = [...ownGallery, ...taggedImages];
-
-  // Sort by year descending (no year → bottom)
   combined.sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0));
-
   if (!combined.length) {
     grid.innerHTML = "<p style='padding:1rem;opacity:.5;font-style:italic'>No gallery images yet.</p>";
     return;
   }
-
   grid.innerHTML = combined.map(item => `
     <div class="gallery-item">
       <div class="gallery-img-wrap">
@@ -663,12 +1183,10 @@ async function loadIndexPage() {
   document.getElementById("add-char-btn")?.addEventListener("click",    () => openEditor(null));
   document.getElementById("nav-add-btn")?.addEventListener("click",     () => openEditor(null));
   document.getElementById("nav-settings-btn")?.addEventListener("click", openSetup);
-
   document.getElementById("setup-close")?.addEventListener("click",  closeSetup);
   document.getElementById("setup-save")?.addEventListener("click",   handleSetupSave);
   document.getElementById("setup-clear")?.addEventListener("click",  handleSetupClear);
   document.getElementById("setup-overlay")?.addEventListener("click", e => { if (e.target.id === "setup-overlay") closeSetup(); });
-
   document.getElementById("sync-banner-btn")?.addEventListener("click", () => {
     document.getElementById("sync-banner").style.display = "none";
     openSetup();
@@ -677,14 +1195,12 @@ async function loadIndexPage() {
     document.getElementById("sync-banner").style.display = "none";
     localStorage.setItem("oc_banner_dismissed", "1");
   });
-
-  document.getElementById("editor-close")?.addEventListener("click",   closeEditor);
+  document.getElementById("editor-close")?.addEventListener("click",        closeEditor);
   document.getElementById("editor-close-bottom")?.addEventListener("click", closeEditor);
   document.getElementById("editor-overlay")?.addEventListener("click", e => { if (e.target.id === "editor-overlay") closeEditor(); });
-  document.getElementById("char-editor-form")?.addEventListener("submit", handleFormSubmit);
-  document.getElementById("add-gallery-row")?.addEventListener("click",    () => addGalleryRow());
+  document.getElementById("char-editor-form")?.addEventListener("submit",   handleFormSubmit);
+  document.getElementById("add-gallery-row")?.addEventListener("click",     () => addGalleryRow());
   document.getElementById("add-custom-link-row")?.addEventListener("click", () => addCustomLinkRow());
-
   document.getElementById("search-input")?.addEventListener("input", e => {
     renderIndexSections(container, e.target.value.trim().toLowerCase());
   });
@@ -700,33 +1216,26 @@ async function loadIndexPage() {
 function renderIndexSections(container, filter) {
   filter = filter || "";
   let characters = getCharacters();
-
-  // Update total count badge
   const totalBadge = document.getElementById("total-char-count");
   if (totalBadge) {
     const n = characters.length;
     totalBadge.textContent = `${n} character${n !== 1 ? "s" : ""}`;
   }
-
   if (filter) {
     characters = characters.filter(c =>
       (c.name   || "").toLowerCase().includes(filter) ||
       (c.fandom || "").toLowerCase().includes(filter)
     );
   }
-
   if (!characters.length) {
     container.innerHTML = `<p class="empty-state" style="padding:1rem 0">${filter ? "No characters match your search." : "No characters yet. Add one!"}</p>`;
     return;
   }
-
   let html = "";
-
   if (!filter) {
     const recentlySorted = [...characters]
       .sort((a, b) => (b.updatedAt || b.id || "").localeCompare(a.updatedAt || a.id || ""))
       .slice(0, 10);
-
     html += `
       <section class="char-section">
         <div class="char-section-header">
@@ -738,14 +1247,12 @@ function renderIndexSections(container, filter) {
         </div>
       </section>`;
   }
-
   const fandoms = {};
   characters.forEach(c => {
     const fandom = (c.fandom || "").trim() || "Uncategorized";
     if (!fandoms[fandom]) fandoms[fandom] = [];
     fandoms[fandom].push(c);
   });
-
   Object.keys(fandoms).sort().forEach(fandom => {
     const chars = fandoms[fandom];
     html += `
@@ -759,9 +1266,7 @@ function renderIndexSections(container, filter) {
         </div>
       </section>`;
   });
-
   container.innerHTML = html;
-
   container.querySelectorAll(".char-card-edit").forEach(btn =>
     btn.addEventListener("click", () => openEditor(btn.dataset.id))
   );
@@ -803,22 +1308,18 @@ let editingId = null;
 function openEditor(id) {
   const overlay = document.getElementById("editor-overlay");
   if (!overlay) return;
-
   editingId = id;
   const c = id ? getCharacters().find(x => x.id === id) : null;
-
   const fields = [
     "name","fandom","nicknames","pronouns","age","birthday",
     "heritage","occupation","refImage","titleImage","appearance","overview",
     "background",
     "links.unvale","links.characterhub","links.artfight","links.spotify"
   ];
-
   if (c?.history && !c.background?.includes(c.history)) {
     const mergedEl = document.getElementById("ef-background");
     if (mergedEl) mergedEl.value = [c.background, c.history].filter(Boolean).join("\n\n");
   }
-
   fields.forEach(key => {
     const el = document.getElementById("ef-" + key.replace(".", "_"));
     if (!el) return;
@@ -826,19 +1327,16 @@ function openEditor(id) {
       ? (c?.links?.[key.split(".")[1]] || "")
       : (c?.[key] || "");
   });
-
   const galleryBody = document.getElementById("gallery-rows");
   if (galleryBody) {
     galleryBody.innerHTML = "";
     (c?.gallery || []).forEach(item => addGalleryRow(item));
   }
-
   const customLinkBody = document.getElementById("custom-link-rows");
   if (customLinkBody) {
     customLinkBody.innerHTML = "";
     (c?.customLinks || []).forEach(link => addCustomLinkRow(link));
   }
-
   document.getElementById("editor-title").textContent = c ? "Edit Character" : "New Character";
   overlay.classList.add("open");
   document.body.style.overflow = "hidden";
@@ -883,26 +1381,21 @@ function addCustomLinkRow(link) {
 async function handleFormSubmit(e) {
   e.preventDefault();
   const valField = id => (document.getElementById(id)?.value || "").trim();
-
   const name   = valField("ef-name");
   const fandom = valField("ef-fandom");
   if (!name || !fandom) { alert("A Name and Fandom are both required before saving a character."); return; }
-
   const gallery = Array.from(document.querySelectorAll("#gallery-rows tr")).map(tr => ({
     src:        (tr.querySelector(".g-src")?.value        || "").trim(),
     caption:    (tr.querySelector(".g-caption")?.value    || "").trim(),
     characters: (tr.querySelector(".g-characters")?.value || "").trim(),
     year:       (tr.querySelector(".g-year")?.value       || "").trim(),
   })).filter(g => g.src);
-
   const customLinks = Array.from(document.querySelectorAll("#custom-link-rows tr")).map(tr => ({
     title: (tr.querySelector(".cl-title")?.value || "").trim(),
     url:   (tr.querySelector(".cl-url")?.value   || "").trim(),
   })).filter(l => l.url);
-
   const now          = new Date().toISOString();
   const existingChar = editingId ? getCharacters().find(c => c.id === editingId) : null;
-
   const character = {
     id:            editingId || generateId(),
     updatedAt:     now,
@@ -921,6 +1414,7 @@ async function handleFormSubmit(e) {
     background:    valField("ef-background"),
     history:       "",
     relationships: existingChar?.relationships || [],
+    treeData:      existingChar?.treeData      || {},
     links: {
       unvale:       valField("ef-links_unvale"),
       characterhub: valField("ef-links_characterhub"),
@@ -930,7 +1424,6 @@ async function handleFormSubmit(e) {
     customLinks,
     gallery,
   };
-
   const characters = getCharacters();
   if (editingId) {
     const idx = characters.findIndex(c => c.id === editingId);
@@ -939,7 +1432,6 @@ async function handleFormSubmit(e) {
   } else {
     characters.push(character);
   }
-
   closeEditor();
   const container = document.getElementById("char-sections-container");
   if (container) renderIndexSections(container);
@@ -961,7 +1453,6 @@ async function deleteCharacter(id) {
 document.addEventListener("DOMContentLoaded", function () {
   loadIndexPage();
   loadCharacterPage();
-
   document.getElementById("rel-editor-close")
     ?.addEventListener("click", closeRelationshipEditor);
   document.getElementById("rel-editor-overlay")
