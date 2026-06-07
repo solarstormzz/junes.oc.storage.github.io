@@ -204,7 +204,7 @@ function loadCharacterPage() {
 
   setText("char-name",       character.name);
   setText("char-fandom",     character.fandom);
-  setText("char-nicknames",  character.nicknames);
+  // nicknames removed from basics table — shown in Details panel
   setText("char-pronouns",   character.pronouns);
   setText("char-age",        character.age);
   setText("char-birthday",   character.birthday);
@@ -230,11 +230,14 @@ function loadCharacterPage() {
 
   initOverviewTabs(id);
   renderRelationships(character.relationships || [], id);
+  renderDetails(character.details || [], character, id);
 
   document.getElementById("char-page-edit-btn")
     ?.addEventListener("click", () => openCharPageEditor(id));
   document.getElementById("edit-relationships-btn")
     ?.addEventListener("click", () => openRelationshipEditor(id));
+  document.getElementById("edit-details-btn")
+    ?.addEventListener("click", () => openDetailsEditor(id));
 }
 
 function renderAllLinks(links, customLinks) {
@@ -262,35 +265,229 @@ function renderAllLinks(links, customLinks) {
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// OVERVIEW / RELATIONSHIPS / TREE TABS
+// OVERVIEW / DETAILS / RELATIONSHIPS / TREE TABS
 // ══════════════════════════════════════════════════════════════════════
 
 function initOverviewTabs(charId) {
   const tabs = {
     overview:      document.getElementById("tab-overview"),
+    details:       document.getElementById("tab-details"),
     relationships: document.getElementById("tab-relationships"),
     tree:          document.getElementById("tab-tree"),
   };
   const panels = {
     overview:      document.getElementById("panel-overview"),
+    details:       document.getElementById("panel-details"),
     relationships: document.getElementById("panel-relationships"),
     tree:          document.getElementById("panel-tree"),
   };
-  const editRelBtn = document.getElementById("edit-relationships-btn");
-  if (editRelBtn) editRelBtn.style.display = "none";
+  const editRelBtn     = document.getElementById("edit-relationships-btn");
+  const editDetailsBtn = document.getElementById("edit-details-btn");
+  if (editRelBtn)     editRelBtn.style.display     = "none";
+  if (editDetailsBtn) editDetailsBtn.style.display = "none";
 
   function activate(key) {
     Object.values(tabs).forEach(t => t && t.classList.remove("active"));
     Object.values(panels).forEach(p => p && (p.style.display = "none"));
     if (tabs[key])   tabs[key].classList.add("active");
     if (panels[key]) panels[key].style.display = "";
-    if (editRelBtn)  editRelBtn.style.display = key === "relationships" ? "" : "none";
+    if (editRelBtn)     editRelBtn.style.display     = key === "relationships" ? "" : "none";
+    if (editDetailsBtn) editDetailsBtn.style.display = key === "details"       ? "" : "none";
     if (key === "tree") renderTree(charId);
   }
 
   tabs.overview?.addEventListener("click",      () => activate("overview"));
+  tabs.details?.addEventListener("click",       () => activate("details"));
   tabs.relationships?.addEventListener("click", () => activate("relationships"));
   tabs.tree?.addEventListener("click",          () => activate("tree"));
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// DETAILS PANEL
+// ══════════════════════════════════════════════════════════════════════
+
+// Preset fields — label + whether it spans both columns
+const DETAILS_PRESETS = [
+  { key: "fullName",    label: "Full Legal Name", wide: false },
+  { key: "nickname",    label: "Nickname",        wide: false },
+  { key: "alias",       label: "Alias / Alias",   wide: false },
+  { key: "sexuality",   label: "Sexuality",        wide: false },
+  { key: "gender",      label: "Gender",           wide: false },
+  { key: "height",      label: "Height",           wide: false },
+  { key: "build",       label: "Build",            wide: false },
+  { key: "eyeColor",    label: "Eye Colour",       wide: false },
+  { key: "hairColor",   label: "Hair Colour",      wide: false },
+  { key: "species",     label: "Species / Race",   wide: false },
+  { key: "religion",    label: "Religion",         wide: false },
+  { key: "mbti",        label: "MBTI",             wide: false },
+  { key: "enneagram",   label: "Enneagram",        wide: false },
+  { key: "alignment",   label: "Alignment",        wide: false },
+  { key: "personality", label: "Personality",      wide: true  },
+  { key: "likes",       label: "Likes",            wide: true  },
+  { key: "dislikes",    label: "Dislikes",         wide: true  },
+  { key: "fears",       label: "Fears",            wide: true  },
+  { key: "hobbies",     label: "Hobbies",          wide: true  },
+  { key: "goals",       label: "Goals",            wide: true  },
+  { key: "flaws",       label: "Flaws",            wide: true  },
+  { key: "trivia",      label: "Trivia",           wide: true  },
+];
+
+function renderDetails(details, character, charId) {
+  const panel = document.getElementById("panel-details");
+  if (!panel) return;
+
+  // Merge: always show nicknames from basic info if present
+  // Build effective list — prepend nickname from character.nicknames if not already in details
+  let effectiveDetails = details || [];
+
+  // Auto-inject nicknames field if character has nicknames and it's not already in details
+  const hasNicknameField = effectiveDetails.some(d => d.key === "nickname" || (d.label || "").toLowerCase() === "nickname");
+  if (character.nicknames && character.nicknames.trim() && !hasNicknameField) {
+    effectiveDetails = [{ key: "nickname", label: "Nickname", value: character.nicknames, wide: false }, ...effectiveDetails];
+  }
+
+  const filled = effectiveDetails.filter(d => (d.value || "").trim());
+
+  if (!filled.length) {
+    panel.innerHTML = `
+      <p class="details-empty-state">No details added yet.
+        <button class="rel-empty-add-btn" id="details-empty-add-btn">Add some</button>
+      </p>`;
+    panel.querySelector("#details-empty-add-btn")?.addEventListener("click", () => openDetailsEditor(charId));
+    return;
+  }
+
+  const html = `<div class="details-grid">${filled.map(d => `
+    <div class="details-field${d.wide ? " details-field--wide" : ""}">
+      <span class="details-label">${escHtml(d.label || d.key || "")}</span>
+      <span class="details-value char-formatted">${escHtml(d.value || "")}</span>
+    </div>`).join("")}</div>`;
+
+  panel.innerHTML = html;
+}
+
+// ── Details editor modal ───────────────────────────────────────────────
+
+let detailsEditingCharId = null;
+
+function openDetailsEditor(charId) {
+  const overlay = document.getElementById("details-editor-overlay");
+  if (!overlay) return;
+  detailsEditingCharId = charId;
+
+  const characters = getCharacters();
+  const character  = characters.find(c => c.id === charId);
+  const existing   = character?.details || [];
+
+  // Populate rows
+  const tbody = document.getElementById("details-editor-rows");
+  if (tbody) {
+    tbody.innerHTML = "";
+    // If character has nicknames but no nickname detail field, seed it
+    const hasNicknameRow = existing.some(d => d.key === "nickname");
+    if (character?.nicknames && character.nicknames.trim() && !hasNicknameRow) {
+      addDetailsRow({ key: "nickname", label: "Nickname", value: character.nicknames, wide: false });
+    }
+    existing.forEach(d => addDetailsRow(d));
+  }
+
+  // Render preset chips
+  renderPresetChips(existing);
+
+  overlay.classList.add("open");
+  document.body.style.overflow = "hidden";
+}
+
+function renderPresetChips(existing) {
+  const container = document.getElementById("details-preset-chips");
+  if (!container) return;
+  const existingKeys = new Set(existing.map(d => d.key).filter(Boolean));
+  container.innerHTML = DETAILS_PRESETS.map(p => {
+    const added = existingKeys.has(p.key);
+    return `<button type="button" class="details-preset-chip${added ? " chip-added" : ""}"
+      data-key="${escHtml(p.key)}" data-label="${escHtml(p.label)}" data-wide="${p.wide}"
+      ${added ? "disabled" : ""}>${escHtml(p.label)}</button>`;
+  }).join("");
+
+  container.querySelectorAll(".details-preset-chip:not(.chip-added)").forEach(btn => {
+    btn.addEventListener("click", () => {
+      addDetailsRow({ key: btn.dataset.key, label: btn.dataset.label, value: "", wide: btn.dataset.wide === "true" });
+      btn.classList.add("chip-added");
+      btn.disabled = true;
+      // Scroll to bottom of rows
+      const tbody = document.getElementById("details-editor-rows");
+      tbody?.lastElementChild?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  });
+}
+
+function addDetailsRow(field) {
+  field = field || {};
+  const tbody = document.getElementById("details-editor-rows");
+  if (!tbody) return;
+
+  const row = document.createElement("div");
+  row.className = "details-editor-row";
+  row.style.cssText = "display:grid;grid-template-columns:160px 60px 1fr 28px;gap:0.3rem;align-items:start;padding:0.45rem 0.9rem;border-bottom:1px solid var(--border);";
+  row.innerHTML = `
+    <input type="text"  class="det-label" placeholder="Field name"  value="${escHtml(field.label || "")}"
+      style="font-family:'DM Sans',sans-serif;font-size:0.8rem;padding:0.3rem 0.5rem;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--ink);width:100%;box-sizing:border-box;outline:none;" />
+    <select class="det-wide"
+      style="font-family:'DM Sans',sans-serif;font-size:0.75rem;padding:0.3rem 0.3rem;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--ink);width:100%;outline:none;"
+      title="Width">
+      <option value="false" ${!field.wide ? "selected" : ""}>Half</option>
+      <option value="true"  ${ field.wide ? "selected" : ""}>Full</option>
+    </select>
+    <textarea class="det-value" rows="2" placeholder="Value…"
+      style="font-family:'DM Sans',sans-serif;font-size:0.8rem;padding:0.3rem 0.5rem;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--ink);width:100%;box-sizing:border-box;resize:vertical;outline:none;min-height:42px;">${escHtml(field.value || "")}</textarea>
+    <button type="button" class="rm-details-row" title="Remove"
+      style="background:none;border:none;color:var(--ink-light);cursor:pointer;font-size:0.85rem;padding:0.25rem 0.3rem;border-radius:3px;transition:color 0.15s;margin-top:2px;">✕</button>
+    <input type="hidden" class="det-key" value="${escHtml(field.key || "")}" />
+  `;
+  row.querySelector(".rm-details-row").addEventListener("click", () => {
+    // Re-enable the chip if it was a preset
+    const keyInp = row.querySelector(".det-key");
+    if (keyInp?.value) {
+      const chip = document.querySelector(`.details-preset-chip[data-key="${keyInp.value}"]`);
+      if (chip) { chip.classList.remove("chip-added"); chip.disabled = false; }
+    }
+    row.remove();
+  });
+  row.querySelector(".rm-details-row").addEventListener("mouseover", function() { this.style.color = "#a05050"; });
+  row.querySelector(".rm-details-row").addEventListener("mouseout",  function() { this.style.color = ""; });
+  tbody.appendChild(row);
+}
+
+function closeDetailsEditor() {
+  document.getElementById("details-editor-overlay")?.classList.remove("open");
+  document.body.style.overflow = "";
+  detailsEditingCharId = null;
+}
+
+async function handleDetailsFormSubmit(e) {
+  e.preventDefault();
+  if (!detailsEditingCharId) return;
+
+  const rows = Array.from(document.querySelectorAll("#details-editor-rows .details-editor-row"));
+  const details = rows.map(row => ({
+    key:   (row.querySelector(".det-key")?.value   || "").trim() || null,
+    label: (row.querySelector(".det-label")?.value || "").trim(),
+    value: (row.querySelector(".det-value")?.value || "").trim(),
+    wide:  row.querySelector(".det-wide")?.value === "true",
+  })).filter(d => d.label && d.value);
+
+  const characters = getCharacters();
+  const idx = characters.findIndex(c => c.id === detailsEditingCharId);
+  if (idx !== -1) {
+    characters[idx].details   = details;
+    characters[idx].updatedAt = new Date().toISOString();
+  }
+
+  closeDetailsEditor();
+
+  const character = characters[idx];
+  renderDetails(details, character, detailsEditingCharId);
+  await saveCharacters(characters);
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -1415,6 +1612,7 @@ async function handleFormSubmit(e) {
     history:       "",
     relationships: existingChar?.relationships || [],
     treeData:      existingChar?.treeData      || {},
+    details:       existingChar?.details       || [],
     links: {
       unvale:       valField("ef-links_unvale"),
       characterhub: valField("ef-links_characterhub"),
@@ -1453,7 +1651,11 @@ async function deleteCharacter(id) {
 document.addEventListener("DOMContentLoaded", function () {
   loadIndexPage();
   loadCharacterPage();
+
+  // Relationship editor
   document.getElementById("rel-editor-close")
+    ?.addEventListener("click", closeRelationshipEditor);
+  document.getElementById("rel-editor-cancel")
     ?.addEventListener("click", closeRelationshipEditor);
   document.getElementById("rel-editor-overlay")
     ?.addEventListener("click", e => { if (e.target.id === "rel-editor-overlay") closeRelationshipEditor(); });
@@ -1461,4 +1663,16 @@ document.addEventListener("DOMContentLoaded", function () {
     ?.addEventListener("submit", handleRelFormSubmit);
   document.getElementById("add-rel-row")
     ?.addEventListener("click", () => addRelRow());
+
+  // Details editor
+  document.getElementById("details-editor-close")
+    ?.addEventListener("click", closeDetailsEditor);
+  document.getElementById("details-editor-cancel")
+    ?.addEventListener("click", closeDetailsEditor);
+  document.getElementById("details-editor-overlay")
+    ?.addEventListener("click", e => { if (e.target.id === "details-editor-overlay") closeDetailsEditor(); });
+  document.getElementById("details-editor-form")
+    ?.addEventListener("submit", handleDetailsFormSubmit);
+  document.getElementById("add-details-row")
+    ?.addEventListener("click", () => addDetailsRow());
 });

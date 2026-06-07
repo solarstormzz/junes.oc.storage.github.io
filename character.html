@@ -357,6 +357,220 @@
     }
     .tree-node { transition: opacity 0.15s; }
     .tree-node:hover { opacity: 0.78; }
+
+    /* ══════════════════════════════════════════
+       DETAILS PANEL
+    ══════════════════════════════════════════ */
+
+    .details-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.75rem 1.5rem;
+    }
+
+    @media (max-width: 640px) {
+      .details-grid { grid-template-columns: 1fr; }
+    }
+
+    .details-field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+
+    .details-field--wide {
+      grid-column: 1 / -1;
+    }
+
+    .details-label {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--ink-light);
+    }
+
+    .details-value {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.83rem;
+      line-height: 1.65;
+      color: var(--ink);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .details-value--empty {
+      color: var(--ink-light);
+      font-style: italic;
+    }
+
+    .details-divider {
+      grid-column: 1 / -1;
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 0.25rem 0;
+    }
+
+    .details-section-heading {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 1rem;
+      font-weight: 500;
+      color: var(--ink-mid);
+      grid-column: 1 / -1;
+      margin-top: 0.25rem;
+      padding-bottom: 0.3rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .details-empty-state {
+      font-size: 0.83rem;
+      color: var(--ink-light);
+      font-style: italic;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.5rem 0;
+    }
+
+    /* ── Details editor modal ── */
+    .details-editor-modal {
+      max-width: 640px;
+    }
+
+    .details-editor-table-wrap {
+      overflow-x: auto;
+    }
+
+    .details-editor-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.78rem;
+    }
+
+    .details-editor-table th {
+      text-align: left;
+      padding: 0.35rem 0.4rem;
+      color: var(--ink-mid);
+      font-weight: 600;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .details-editor-row td {
+      padding: 0.3rem 0.3rem;
+      vertical-align: top;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .details-editor-row:last-child td {
+      border-bottom: none;
+    }
+
+    .details-editor-row input[type="text"],
+    .details-editor-row textarea {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.8rem;
+      padding: 0.3rem 0.5rem;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--card);
+      color: var(--ink);
+      width: 100%;
+      box-sizing: border-box;
+      resize: vertical;
+      transition: border-color 0.15s;
+    }
+
+    .details-editor-row input:focus,
+    .details-editor-row textarea:focus {
+      outline: none;
+      border-color: #b5afa6;
+    }
+
+    .details-editor-row textarea {
+      min-height: 48px;
+    }
+
+    .details-editor-hint {
+      font-size: 0.78rem;
+      color: var(--ink-light);
+      line-height: 1.6;
+    }
+
+    .details-preset-section {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .details-preset-header {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--ink-light);
+      padding: 0.55rem 0.9rem;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .details-preset-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      padding: 0.75rem 0.9rem;
+    }
+
+    .details-preset-chip {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.72rem;
+      padding: 0.2rem 0.65rem;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      background: var(--card);
+      color: var(--ink-mid);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+
+    .details-preset-chip:hover {
+      background: var(--surface);
+      color: var(--ink);
+      border-color: #b5afa6;
+    }
+
+    .details-preset-chip.chip-added {
+      background: var(--surface);
+      color: var(--ink-light);
+      border-color: var(--border);
+      cursor: default;
+      opacity: 0.55;
+    }
+
+    .details-custom-section {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .details-custom-header {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--ink-light);
+      padding: 0.55rem 0.9rem;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+
+    #details-editor-rows {
+      padding: 0.25rem 0;
+    }
   </style>
 </head>
 
@@ -383,7 +597,6 @@
         <p class="char-fandom" id="char-fandom"></p>
 
         <table class="char-table">
-          <tr><td>Nicknames</td><td id="char-nicknames"></td></tr>
           <tr><td>Pronouns</td><td id="char-pronouns"></td></tr>
           <tr><td>Age</td><td id="char-age"></td></tr>
           <tr><td>Birthday</td><td id="char-birthday"></td></tr>
@@ -408,10 +621,12 @@
         <div class="overview-tab-bar">
           <div class="overview-tabs">
             <button id="tab-overview"       class="overview-tab active">Overview</button>
+            <button id="tab-details"        class="overview-tab">Details</button>
             <button id="tab-relationships"  class="overview-tab">Relationships</button>
             <button id="tab-tree"           class="overview-tab">Tree</button>
           </div>
-          <button id="edit-relationships-btn" class="rel-edit-trigger" title="Edit relationships">Edit</button>
+          <button id="edit-relationships-btn" class="rel-edit-trigger" title="Edit relationships" style="display:none">Edit</button>
+          <button id="edit-details-btn"       class="rel-edit-trigger" title="Edit details"       style="display:none">Edit</button>
         </div>
 
         <div id="panel-overview" class="overview-panel">
@@ -420,9 +635,9 @@
           <div id="char-bg-history-container"></div>
         </div>
 
+        <div id="panel-details"       class="overview-panel" style="display:none"></div>
         <div id="panel-relationships" class="overview-panel" style="display:none"></div>
-
-        <div id="panel-tree" class="overview-panel" style="display:none"></div>
+        <div id="panel-tree"          class="overview-panel" style="display:none"></div>
 
       </main>
     </div>
@@ -460,6 +675,41 @@
         <div class="editor-actions">
           <button type="button" class="editor-btn-cancel" id="rel-editor-cancel">Cancel</button>
           <button type="submit" class="editor-btn-save">Save Relationships</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Details editor modal -->
+  <div id="details-editor-overlay" class="editor-overlay">
+    <div class="editor-modal details-editor-modal">
+      <div class="editor-modal-header">
+        <h2 class="editor-modal-title">Edit Details</h2>
+        <button id="details-editor-close" class="editor-close" aria-label="Close">✕</button>
+      </div>
+      <form id="details-editor-form" class="editor-form">
+        <p class="details-editor-hint">
+          Fill in any fields you'd like to show, and leave the rest blank — empty fields won't appear on the page.
+          Add custom fields at the bottom.
+        </p>
+
+        <!-- Preset quick-add chips -->
+        <div class="details-preset-section">
+          <p class="details-preset-header">Quick-add a field</p>
+          <div class="details-preset-grid" id="details-preset-chips"></div>
+        </div>
+
+        <!-- The editable rows -->
+        <div class="details-custom-section">
+          <p class="details-custom-header">Fields</p>
+          <div id="details-editor-rows"></div>
+        </div>
+
+        <button type="button" id="add-details-row" class="add-gallery-btn">+ Add Custom Field</button>
+
+        <div class="editor-actions">
+          <button type="button" class="editor-btn-cancel" id="details-editor-cancel">Cancel</button>
+          <button type="submit" class="editor-btn-save">Save Details</button>
         </div>
       </form>
     </div>
