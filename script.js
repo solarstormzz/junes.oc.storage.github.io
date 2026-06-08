@@ -1083,7 +1083,6 @@ function wireExpandable(block) {
 
 // ══════════════════════════════════════════════════════════════════════
 // RELATIONSHIPS
-// FIX 3: Raised cutoff to 1000 characters
 // ══════════════════════════════════════════════════════════════════════
 
 const REL_TRUNCATE = 1000;
@@ -1326,7 +1325,6 @@ function renderGallery(ownGallery, currentCharId) {
 }
 
 function openCharPageEditor(id) {
-  // FIX 4: Open edit modal directly on character page instead of navigating away
   openEditor(id);
 }
 
@@ -1372,12 +1370,6 @@ async function loadIndexPage() {
     document.getElementById("sync-banner").style.display = "none";
     localStorage.setItem("oc_banner_dismissed", "1");
   });
-  document.getElementById("editor-close")?.addEventListener("click",        closeEditor);
-  document.getElementById("editor-close-bottom")?.addEventListener("click", closeEditor);
-  document.getElementById("editor-overlay")?.addEventListener("click", e => { if (e.target.id === "editor-overlay") closeEditor(); });
-  document.getElementById("char-editor-form")?.addEventListener("submit",   handleFormSubmit);
-  document.getElementById("add-gallery-row")?.addEventListener("click",     () => addGalleryRow());
-  document.getElementById("add-custom-link-row")?.addEventListener("click", () => addCustomLinkRow());
   document.getElementById("search-input")?.addEventListener("input", e => {
     renderIndexSections(container, e.target.value.trim().toLowerCase());
   });
@@ -1391,7 +1383,7 @@ async function loadIndexPage() {
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// FIX 1: Carousel-style index sections (replace horizontal scroll)
+// CAROUSEL-STYLE INDEX SECTIONS
 // ══════════════════════════════════════════════════════════════════════
 
 function renderIndexSections(container, filter) {
@@ -1454,24 +1446,19 @@ function renderIndexSections(container, filter) {
 
   container.innerHTML = html;
 
-  // Wire up carousel controls
   container.querySelectorAll(".carousel-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       const sIdx     = btn.dataset.section;
       const carousel = container.querySelector(`.char-carousel[data-section="${sIdx}"]`);
       if (!carousel) return;
       const card   = carousel.querySelector(".char-card");
-      const step   = card ? card.offsetWidth + 16 : 186; // card width + gap
+      const step   = card ? card.offsetWidth + 16 : 186;
       const dir    = btn.classList.contains("carousel-next") ? 1 : -1;
       carousel.scrollBy({ left: dir * step * 3, behavior: "smooth" });
     });
   });
-
-  // FIX 4: No edit/delete on cards — cards only show name, fandom, link
-  // (renderCharCard now omits those buttons)
 }
 
-// FIX 4: Simplified card — no edit/delete buttons
 function renderCharCard(c) {
   const cardImg = c.titleImage || c.refImage;
   return `
@@ -1494,7 +1481,6 @@ function renderCharCard(c) {
 
 // ══════════════════════════════════════════════════════════════════════
 // EDITOR MODAL
-// FIX 4: Delete button moved to bottom of edit window
 // ══════════════════════════════════════════════════════════════════════
 
 let editingId = null;
@@ -1533,7 +1519,6 @@ function openEditor(id) {
   }
   document.getElementById("editor-title").textContent = c ? "Edit Character" : "New Character";
 
-  // Show/hide delete button in editor footer
   const deleteBtn = document.getElementById("editor-delete-btn");
   if (deleteBtn) {
     deleteBtn.style.display = id ? "" : "none";
@@ -1637,7 +1622,6 @@ async function handleFormSubmit(e) {
   closeEditor();
   const container = document.getElementById("char-sections-container");
   if (container) renderIndexSections(container);
-  // If on character page, reload the character data
   if (document.getElementById("char-name")) {
     loadCharacterPage();
   }
@@ -1650,7 +1634,6 @@ async function deleteCharacter(id) {
   closeEditor();
   const container  = document.getElementById("char-sections-container");
   if (container) renderIndexSections(container);
-  // If on character page, go back to index
   if (document.getElementById("char-name")) {
     window.location.href = "index.html";
   }
@@ -1665,33 +1648,36 @@ document.addEventListener("DOMContentLoaded", function () {
   loadIndexPage();
   loadCharacterPage();
 
-  // Relationship editor
-  document.getElementById("rel-editor-close")
-    ?.addEventListener("click", closeRelationshipEditor);
-  document.getElementById("rel-editor-cancel")
-    ?.addEventListener("click", closeRelationshipEditor);
-  document.getElementById("rel-editor-overlay")
-    ?.addEventListener("click", e => { if (e.target.id === "rel-editor-overlay") closeRelationshipEditor(); });
-  document.getElementById("rel-editor-form")
-    ?.addEventListener("submit", handleRelFormSubmit);
-  document.getElementById("add-rel-row")
-    ?.addEventListener("click", () => addRelRow());
+  // ── Editor modal (wired here so it works on BOTH index.html and character.html) ──
+  document.getElementById("editor-close")?.addEventListener("click", closeEditor);
+  document.getElementById("editor-close-bottom")?.addEventListener("click", closeEditor);
+  document.getElementById("editor-overlay")?.addEventListener("click", e => {
+    if (e.target.id === "editor-overlay") closeEditor();
+  });
+  document.getElementById("char-editor-form")?.addEventListener("submit", handleFormSubmit);
+  document.getElementById("add-gallery-row")?.addEventListener("click", () => addGalleryRow());
+  document.getElementById("add-custom-link-row")?.addEventListener("click", () => addCustomLinkRow());
 
-  // Details editor
-  document.getElementById("details-editor-close")
-    ?.addEventListener("click", closeDetailsEditor);
-  document.getElementById("details-editor-cancel")
-    ?.addEventListener("click", closeDetailsEditor);
-  document.getElementById("details-editor-overlay")
-    ?.addEventListener("click", e => { if (e.target.id === "details-editor-overlay") closeDetailsEditor(); });
-  document.getElementById("details-editor-form")
-    ?.addEventListener("submit", handleDetailsFormSubmit);
-  document.getElementById("add-details-row")
-    ?.addEventListener("click", () => addDetailsRow());
+  // ── Delete button in editor footer ──
+  document.getElementById("editor-delete-btn")?.addEventListener("click", () => {
+    if (editingId) deleteCharacter(editingId);
+  });
 
-  // FIX 4: Delete button in editor modal
-  document.getElementById("editor-delete-btn")
-    ?.addEventListener("click", () => {
-      if (editingId) deleteCharacter(editingId);
-    });
+  // ── Relationship editor ──
+  document.getElementById("rel-editor-close")?.addEventListener("click", closeRelationshipEditor);
+  document.getElementById("rel-editor-cancel")?.addEventListener("click", closeRelationshipEditor);
+  document.getElementById("rel-editor-overlay")?.addEventListener("click", e => {
+    if (e.target.id === "rel-editor-overlay") closeRelationshipEditor();
+  });
+  document.getElementById("rel-editor-form")?.addEventListener("submit", handleRelFormSubmit);
+  document.getElementById("add-rel-row")?.addEventListener("click", () => addRelRow());
+
+  // ── Details editor ──
+  document.getElementById("details-editor-close")?.addEventListener("click", closeDetailsEditor);
+  document.getElementById("details-editor-cancel")?.addEventListener("click", closeDetailsEditor);
+  document.getElementById("details-editor-overlay")?.addEventListener("click", e => {
+    if (e.target.id === "details-editor-overlay") closeDetailsEditor();
+  });
+  document.getElementById("details-editor-form")?.addEventListener("submit", handleDetailsFormSubmit);
+  document.getElementById("add-details-row")?.addEventListener("click", () => addDetailsRow());
 });
