@@ -279,18 +279,22 @@ function initOverviewTabs(charId) {
     details:       document.getElementById("tab-details"),
     relationships: document.getElementById("tab-relationships"),
     tree:          document.getElementById("tab-tree"),
+    stories:       document.getElementById("tab-stories"),
   };
   const panels = {
     overview:      document.getElementById("panel-overview"),
     details:       document.getElementById("panel-details"),
     relationships: document.getElementById("panel-relationships"),
     tree:          document.getElementById("panel-tree"),
+    stories:       document.getElementById("panel-stories"),
   };
   const editRelBtn      = document.getElementById("edit-relationships-btn");
   const editDetailsBtn  = document.getElementById("edit-details-btn");
   const editOverviewBtn = document.getElementById("edit-overview-btn");
+  const addStoryBtn     = document.getElementById("add-story-btn");
   if (editRelBtn)     editRelBtn.style.display     = "none";
   if (editDetailsBtn) editDetailsBtn.style.display = "none";
+  if (addStoryBtn)    addStoryBtn.style.display    = "none";
   // overview edit btn is visible by default (overview tab starts active)
 
   function activate(key) {
@@ -301,13 +305,18 @@ function initOverviewTabs(charId) {
     if (editRelBtn)      editRelBtn.style.display      = key === "relationships" ? "" : "none";
     if (editDetailsBtn)  editDetailsBtn.style.display  = key === "details"       ? "" : "none";
     if (editOverviewBtn) editOverviewBtn.style.display = key === "overview"      ? "" : "none";
-    if (key === "tree") renderTree(charId);
+    if (addStoryBtn)     addStoryBtn.style.display     = key === "stories"       ? "" : "none";
+    if (key === "tree")    renderTree(charId);
+    if (key === "stories") renderStories(charId);
   }
 
   tabs.overview?.addEventListener("click",      () => activate("overview"));
   tabs.details?.addEventListener("click",       () => activate("details"));
   tabs.relationships?.addEventListener("click", () => activate("relationships"));
   tabs.tree?.addEventListener("click",          () => activate("tree"));
+  tabs.stories?.addEventListener("click",       () => activate("stories"));
+
+  addStoryBtn?.addEventListener("click", () => openStoryEditor(charId, null));
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -2009,6 +2018,158 @@ async function deleteCharacter(id) {
 }
 
 // ══════════════════════════════════════════════════════════════════════
+// STORIES
+// ══════════════════════════════════════════════════════════════════════
+
+function renderStories(charId) {
+  const panel = document.getElementById("panel-stories");
+  if (!panel) return;
+  const character = getCharacters().find(c => c.id === charId);
+  const stories   = character?.stories || [];
+
+  if (!stories.length) {
+    panel.innerHTML = `
+      <p class="stories-empty-state">No stories yet.
+        <button class="rel-empty-add-btn" id="stories-empty-add-btn">Add one</button>
+      </p>`;
+    panel.querySelector("#stories-empty-add-btn")
+      ?.addEventListener("click", () => openStoryEditor(charId, null));
+    return;
+  }
+
+  const grid = document.createElement("div");
+  grid.className = "stories-grid";
+  stories.forEach(story => {
+    const card = document.createElement("div");
+    card.className = "story-card";
+    card.innerHTML = `
+      <span class="story-card-title">${escHtml(story.title || "Untitled")}</span>
+      ${story.subtitle ? `<span class="story-card-subtitle">${escHtml(story.subtitle)}</span>` : ""}
+    `;
+    card.addEventListener("click", () => openStoryReader(charId, story.id));
+    grid.appendChild(card);
+  });
+  panel.innerHTML = "";
+  panel.appendChild(grid);
+}
+
+// ── Story reader ─────────────────────────────────────────────────────
+
+let _storyReaderCharId  = null;
+let _storyReaderStoryId = null;
+
+function openStoryReader(charId, storyId) {
+  const overlay = document.getElementById("story-reader-overlay");
+  if (!overlay) return;
+  const character = getCharacters().find(c => c.id === charId);
+  const story     = (character?.stories || []).find(s => s.id === storyId);
+  if (!story) return;
+
+  _storyReaderCharId  = charId;
+  _storyReaderStoryId = storyId;
+
+  document.getElementById("story-reader-title").textContent    = story.title    || "Untitled";
+  document.getElementById("story-reader-subtitle").textContent = story.subtitle || "";
+  document.getElementById("story-reader-subtitle").style.display = story.subtitle ? "" : "none";
+  document.getElementById("story-reader-body").textContent     = story.body     || "";
+
+  overlay.classList.add("open");
+  document.body.style.overflow = "hidden";
+}
+
+function closeStoryReader() {
+  document.getElementById("story-reader-overlay")?.classList.remove("open");
+  document.body.style.overflow = "";
+  _storyReaderCharId  = null;
+  _storyReaderStoryId = null;
+}
+
+// ── Story editor ─────────────────────────────────────────────────────
+
+let _storyEditingCharId  = null;
+let _storyEditingStoryId = null;
+
+function openStoryEditor(charId, storyId) {
+  // If called from the reader, close it first
+  const readerOverlay = document.getElementById("story-reader-overlay");
+  if (readerOverlay?.classList.contains("open")) {
+    readerOverlay.classList.remove("open");
+  }
+
+  const overlay = document.getElementById("story-editor-overlay");
+  if (!overlay) return;
+  _storyEditingCharId  = charId;
+  _storyEditingStoryId = storyId;
+
+  const character = getCharacters().find(c => c.id === charId);
+  const story     = storyId ? (character?.stories || []).find(s => s.id === storyId) : null;
+
+  document.getElementById("sef-title").value    = story?.title    || "";
+  document.getElementById("sef-subtitle").value = story?.subtitle || "";
+  document.getElementById("sef-body").value     = story?.body     || "";
+
+  const deleteBtn = document.getElementById("story-editor-delete-btn");
+  if (deleteBtn) deleteBtn.style.display = storyId ? "" : "none";
+
+  document.getElementById("story-editor-title").textContent = storyId ? "Edit Story" : "New Story";
+
+  overlay.classList.add("open");
+  document.body.style.overflow = "hidden";
+}
+
+function closeStoryEditor() {
+  document.getElementById("story-editor-overlay")?.classList.remove("open");
+  document.body.style.overflow = "";
+  _storyEditingCharId  = null;
+  _storyEditingStoryId = null;
+}
+
+async function handleStoryFormSubmit(e) {
+  e.preventDefault();
+  if (!_storyEditingCharId) return;
+
+  const title    = (document.getElementById("sef-title")?.value    || "").trim();
+  const subtitle = (document.getElementById("sef-subtitle")?.value || "").trim();
+  const body     = (document.getElementById("sef-body")?.value     || "").trim();
+
+  if (!title) { alert("Please give your story a title."); return; }
+
+  const characters = getCharacters();
+  const idx = characters.findIndex(c => c.id === _storyEditingCharId);
+  if (idx === -1) return;
+
+  if (!characters[idx].stories) characters[idx].stories = [];
+
+  const now = new Date().toISOString();
+  if (_storyEditingStoryId) {
+    const sIdx = characters[idx].stories.findIndex(s => s.id === _storyEditingStoryId);
+    if (sIdx !== -1) {
+      characters[idx].stories[sIdx] = { ...characters[idx].stories[sIdx], title, subtitle, body, updatedAt: now };
+    }
+  } else {
+    characters[idx].stories.push({ id: generateId(), title, subtitle, body, createdAt: now, updatedAt: now });
+  }
+  characters[idx].updatedAt = now;
+
+  closeStoryEditor();
+  renderStories(_storyEditingCharId || characters[idx].id);
+  await saveCharacters(characters);
+}
+
+async function deleteStory(charId, storyId) {
+  if (!confirm("Delete this story? This cannot be undone.")) return;
+  const characters = getCharacters();
+  const idx = characters.findIndex(c => c.id === charId);
+  if (idx !== -1) {
+    characters[idx].stories = (characters[idx].stories || []).filter(s => s.id !== storyId);
+    characters[idx].updatedAt = new Date().toISOString();
+  }
+  closeStoryEditor();
+  renderStories(charId);
+  await saveCharacters(characters);
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════════════════════════════════
 
@@ -2065,4 +2226,25 @@ document.addEventListener("DOMContentLoaded", function () {
   });
   document.getElementById("details-editor-form")?.addEventListener("submit", handleDetailsFormSubmit);
   document.getElementById("add-details-row")?.addEventListener("click", () => { addDetailsRow(); _markDetailsDirty(); });
+
+  // ── Story reader ──
+  document.getElementById("story-reader-close")?.addEventListener("click", closeStoryReader);
+  document.getElementById("story-reader-overlay")?.addEventListener("click", e => {
+    if (e.target.id === "story-reader-overlay") closeStoryReader();
+  });
+  document.getElementById("story-reader-edit-btn")?.addEventListener("click", () => {
+    openStoryEditor(_storyReaderCharId, _storyReaderStoryId);
+  });
+
+  // ── Story editor ──
+  document.getElementById("story-editor-close")?.addEventListener("click", closeStoryEditor);
+  document.getElementById("story-editor-cancel")?.addEventListener("click", closeStoryEditor);
+  document.getElementById("story-editor-overlay")?.addEventListener("click", e => {
+    if (e.target.id === "story-editor-overlay") closeStoryEditor();
+  });
+  document.getElementById("story-editor-form")?.addEventListener("submit", handleStoryFormSubmit);
+  document.getElementById("story-editor-delete-btn")?.addEventListener("click", () => {
+    if (_storyEditingCharId && _storyEditingStoryId)
+      deleteStory(_storyEditingCharId, _storyEditingStoryId);
+  });
 });

@@ -671,10 +671,12 @@
             <button id="tab-details"        class="overview-tab">Details</button>
             <button id="tab-relationships"  class="overview-tab">Relationships</button>
             <button id="tab-tree"           class="overview-tab">Tree</button>
+            <button id="tab-stories"        class="overview-tab">Stories</button>
           </div>
           <button id="edit-overview-btn"       class="rel-edit-trigger" title="Edit overview &amp; history">Edit</button>
           <button id="edit-relationships-btn" class="rel-edit-trigger" title="Edit relationships" style="display:none">Edit</button>
           <button id="edit-details-btn"       class="rel-edit-trigger" title="Edit details"       style="display:none">Edit</button>
+          <button id="add-story-btn"          class="rel-edit-trigger" title="Add a story"        style="display:none">＋ Add</button>
         </div>
 
         <div id="panel-overview" class="overview-panel">
@@ -686,6 +688,7 @@
         <div id="panel-details"       class="overview-panel" style="display:none"></div>
         <div id="panel-relationships" class="overview-panel" style="display:none"></div>
         <div id="panel-tree"          class="overview-panel" style="display:none"></div>
+        <div id="panel-stories"       class="overview-panel" style="display:none"></div>
 
       </main>
     </div>
@@ -922,6 +925,55 @@
           <button type="submit" class="editor-btn-save">Save Character</button>
         </div>
 
+      </form>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════ STORY READER PANEL ══════════════════════════════ -->
+  <div id="story-reader-overlay" class="editor-overlay">
+    <div class="story-reader-modal">
+      <div class="story-reader-header">
+        <div class="story-reader-header-left">
+          <button id="story-reader-close" class="editor-close" aria-label="Close">✕</button>
+          <div>
+            <h2 id="story-reader-title" class="story-reader-title"></h2>
+            <p  id="story-reader-subtitle" class="story-reader-subtitle"></p>
+          </div>
+        </div>
+        <button id="story-reader-edit-btn" class="char-nav-edit-btn">Edit</button>
+      </div>
+      <div id="story-reader-body" class="story-reader-body"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════ STORY EDITOR MODAL ═══════════════════════════════ -->
+  <div id="story-editor-overlay" class="editor-overlay">
+    <div class="editor-modal" style="max-width:640px">
+      <div class="editor-modal-header">
+        <h2 id="story-editor-title" class="editor-modal-title">New Story</h2>
+        <button id="story-editor-close" class="editor-close" aria-label="Close">✕</button>
+      </div>
+      <form id="story-editor-form" class="editor-form">
+        <fieldset class="editor-fieldset">
+          <legend>Story Info</legend>
+          <div class="editor-row">
+            <label>Title <input type="text" id="sef-title" placeholder="Story title" /></label>
+            <label>Subtitle <input type="text" id="sef-subtitle" placeholder="e.g. Chapter 1, one-shot, AU…" /></label>
+          </div>
+        </fieldset>
+        <fieldset class="editor-fieldset" style="flex:1;display:flex;flex-direction:column">
+          <legend>Story Text</legend>
+          <label class="editor-label-full" style="flex:1;display:flex;flex-direction:column">
+            <textarea id="sef-body" rows="16" placeholder="Write your story here…" style="flex:1;resize:vertical"></textarea>
+          </label>
+        </fieldset>
+        <div class="editor-actions">
+          <div class="editor-delete-zone">
+            <button type="button" id="story-editor-delete-btn" class="editor-btn-delete" style="display:none">Delete Story</button>
+          </div>
+          <button type="button" class="editor-btn-cancel" id="story-editor-cancel">Cancel</button>
+          <button type="submit" class="editor-btn-save">Save Story</button>
+        </div>
       </form>
     </div>
   </div>
