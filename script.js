@@ -237,6 +237,12 @@ function loadCharacterPage() {
     ?.addEventListener("click", () => openRelationshipEditor(id));
   document.getElementById("edit-details-btn")
     ?.addEventListener("click", () => openDetailsEditor(id));
+  document.getElementById("edit-overview-btn")
+    ?.addEventListener("click", () => openOverviewEditor(id));
+  document.getElementById("gallery-edit-btn")
+    ?.addEventListener("click", () => openGalleryEditor(id));
+  document.getElementById("gallery-add-btn")
+    ?.addEventListener("click", () => openGalleryEditor(id, true));
 }
 
 function renderAllLinks(links, customLinks) {
@@ -280,18 +286,21 @@ function initOverviewTabs(charId) {
     relationships: document.getElementById("panel-relationships"),
     tree:          document.getElementById("panel-tree"),
   };
-  const editRelBtn     = document.getElementById("edit-relationships-btn");
-  const editDetailsBtn = document.getElementById("edit-details-btn");
+  const editRelBtn      = document.getElementById("edit-relationships-btn");
+  const editDetailsBtn  = document.getElementById("edit-details-btn");
+  const editOverviewBtn = document.getElementById("edit-overview-btn");
   if (editRelBtn)     editRelBtn.style.display     = "none";
   if (editDetailsBtn) editDetailsBtn.style.display = "none";
+  // overview edit btn is visible by default (overview tab starts active)
 
   function activate(key) {
     Object.values(tabs).forEach(t => t && t.classList.remove("active"));
     Object.values(panels).forEach(p => p && (p.style.display = "none"));
     if (tabs[key])   tabs[key].classList.add("active");
     if (panels[key]) panels[key].style.display = "";
-    if (editRelBtn)     editRelBtn.style.display     = key === "relationships" ? "" : "none";
-    if (editDetailsBtn) editDetailsBtn.style.display = key === "details"       ? "" : "none";
+    if (editRelBtn)      editRelBtn.style.display      = key === "relationships" ? "" : "none";
+    if (editDetailsBtn)  editDetailsBtn.style.display  = key === "details"       ? "" : "none";
+    if (editOverviewBtn) editOverviewBtn.style.display = key === "overview"      ? "" : "none";
     if (key === "tree") renderTree(charId);
   }
 
@@ -306,29 +315,39 @@ function initOverviewTabs(charId) {
 // ══════════════════════════════════════════════════════════════════════
 
 const DETAILS_PRESETS = [
-  { key: "fullName",    label: "Full Legal Name", wide: false },
-  { key: "nickname",    label: "Nickname",        wide: false },
-  { key: "alias",       label: "Alias / Alias",   wide: false },
-  { key: "sexuality",   label: "Sexuality",        wide: false },
-  { key: "gender",      label: "Gender",           wide: false },
-  { key: "height",      label: "Height",           wide: false },
-  { key: "build",       label: "Build",            wide: false },
-  { key: "eyeColor",    label: "Eye Colour",       wide: false },
-  { key: "hairColor",   label: "Hair Colour",      wide: false },
-  { key: "species",     label: "Species / Race",   wide: false },
-  { key: "religion",    label: "Religion",         wide: false },
-  { key: "mbti",        label: "MBTI",             wide: false },
-  { key: "enneagram",   label: "Enneagram",        wide: false },
-  { key: "alignment",   label: "Alignment",        wide: false },
-  { key: "personality", label: "Personality",      wide: true  },
-  { key: "likes",       label: "Likes",            wide: true  },
-  { key: "dislikes",    label: "Dislikes",         wide: true  },
-  { key: "fears",       label: "Fears",            wide: true  },
-  { key: "hobbies",     label: "Hobbies",          wide: true  },
-  { key: "goals",       label: "Goals",            wide: true  },
-  { key: "flaws",       label: "Flaws",            wide: true  },
-  { key: "trivia",      label: "Trivia",           wide: true  },
+  { key: "fullName",           label: "Full Legal Name" },
+  { key: "nickname",           label: "Nickname" },
+  { key: "alias",              label: "Alias" },
+  { key: "title",              label: "Title" },
+  { key: "sexuality",          label: "Sexuality" },
+  { key: "relationshipStatus", label: "Relationship Status" },
+  { key: "gender",             label: "Gender" },
+  { key: "height",             label: "Height" },
+  { key: "build",              label: "Build" },
+  { key: "eyeColor",           label: "Eye Colour" },
+  { key: "hairColor",          label: "Hair Colour" },
+  { key: "skinColor",          label: "Skin Colour" },
+  { key: "fashionStyle",       label: "Fashion Style" },
+  { key: "species",            label: "Species / Race" },
+  { key: "birthplace",         label: "Birthplace" },
+  { key: "mbti",               label: "MBTI" },
+  { key: "virtues",            label: "Virtues" },
+  { key: "personality",        label: "Personality" },
+  { key: "likes",              label: "Likes" },
+  { key: "dislikes",           label: "Dislikes" },
+  { key: "fears",              label: "Fears" },
+  { key: "hobbies",            label: "Hobbies" },
+  { key: "goals",              label: "Goals" },
+  { key: "flaws",              label: "Flaws" },
+  { key: "trivia",             label: "Trivia" },
 ];
+
+// Fields now size themselves automatically based on how much text they hold,
+// instead of the old manual Half/Full toggle — long values span the full row.
+function isWideDetail(value) {
+  const v = value || "";
+  return v.length > 60 || /\r|\n/.test(v);
+}
 
 function renderDetails(details, character, charId) {
   const panel = document.getElementById("panel-details");
@@ -338,7 +357,7 @@ function renderDetails(details, character, charId) {
 
   const hasNicknameField = effectiveDetails.some(d => d.key === "nickname" || (d.label || "").toLowerCase() === "nickname");
   if (character.nicknames && character.nicknames.trim() && !hasNicknameField) {
-    effectiveDetails = [{ key: "nickname", label: "Nickname", value: character.nicknames, wide: false }, ...effectiveDetails];
+    effectiveDetails = [{ key: "nickname", label: "Nickname", value: character.nicknames }, ...effectiveDetails];
   }
 
   const filled = effectiveDetails.filter(d => (d.value || "").trim());
@@ -353,7 +372,7 @@ function renderDetails(details, character, charId) {
   }
 
   const html = `<div class="details-grid">${filled.map(d => `
-    <div class="details-field${d.wide ? " details-field--wide" : ""}">
+    <div class="details-field${isWideDetail(d.value) ? " details-field--wide" : ""}">
       <span class="details-label">${escHtml(d.label || d.key || "")}</span>
       <span class="details-value char-formatted">${escHtml(d.value || "")}</span>
     </div>`).join("")}</div>`;
@@ -364,11 +383,16 @@ function renderDetails(details, character, charId) {
 // ── Details editor modal ───────────────────────────────────────────────
 
 let detailsEditingCharId = null;
+// FIX 2: track whether the details editor has unsaved changes
+let _detailsDirty = false;
+
+function _markDetailsDirty() { _detailsDirty = true; }
 
 function openDetailsEditor(charId) {
   const overlay = document.getElementById("details-editor-overlay");
   if (!overlay) return;
   detailsEditingCharId = charId;
+  _detailsDirty = false;
 
   const characters = getCharacters();
   const character  = characters.find(c => c.id === charId);
@@ -379,7 +403,7 @@ function openDetailsEditor(charId) {
     tbody.innerHTML = "";
     const hasNicknameRow = existing.some(d => d.key === "nickname");
     if (character?.nicknames && character.nicknames.trim() && !hasNicknameRow) {
-      addDetailsRow({ key: "nickname", label: "Nickname", value: character.nicknames, wide: false });
+      addDetailsRow({ key: "nickname", label: "Nickname", value: character.nicknames });
     }
     existing.forEach(d => addDetailsRow(d));
   }
@@ -397,19 +421,65 @@ function renderPresetChips(existing) {
   container.innerHTML = DETAILS_PRESETS.map(p => {
     const added = existingKeys.has(p.key);
     return `<button type="button" class="details-preset-chip${added ? " chip-added" : ""}"
-      data-key="${escHtml(p.key)}" data-label="${escHtml(p.label)}" data-wide="${p.wide}"
+      data-key="${escHtml(p.key)}" data-label="${escHtml(p.label)}"
       ${added ? "disabled" : ""}>${escHtml(p.label)}</button>`;
   }).join("");
 
   container.querySelectorAll(".details-preset-chip:not(.chip-added)").forEach(btn => {
     btn.addEventListener("click", () => {
-      addDetailsRow({ key: btn.dataset.key, label: btn.dataset.label, value: "", wide: btn.dataset.wide === "true" });
+      addDetailsRow({ key: btn.dataset.key, label: btn.dataset.label, value: "" });
       btn.classList.add("chip-added");
       btn.disabled = true;
+      _markDetailsDirty();
       const tbody = document.getElementById("details-editor-rows");
       tbody?.lastElementChild?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     });
   });
+}
+
+// ── Reorder support ──────────────────────────────────────────────────
+// Built on Pointer Events (not the native HTML5 drag-and-drop API) so that
+// reordering works the same way with mouse, touch, and pen — native DnD
+// never fires from touch input on phones/tablets, which is why dragging
+// previously only worked on desktop.
+let _dragState = null;
+
+function startRowDrag(handle, row, tbody, pointerId) {
+  handle.setPointerCapture(pointerId);
+  row.classList.add("det-dragging");
+  _dragState = { row, tbody, pointerId };
+
+  const onMove = ev => {
+    if (!_dragState || ev.pointerId !== pointerId) return;
+    const y = ev.clientY;
+    const siblings = Array.from(tbody.querySelectorAll(".details-editor-row")).filter(r => r !== row);
+    for (const sib of siblings) {
+      const rect = sib.getBoundingClientRect();
+      const mid = rect.top + rect.height / 2;
+      if (y < mid) {
+        if (sib.previousElementSibling !== row) tbody.insertBefore(row, sib);
+        break;
+      } else if (sib === siblings[siblings.length - 1]) {
+        if (sib.nextElementSibling !== row) tbody.insertBefore(row, sib.nextElementSibling);
+        break;
+      }
+    }
+  };
+
+  const onUp = ev => {
+    if (ev.pointerId !== pointerId) return;
+    handle.releasePointerCapture(pointerId);
+    row.classList.remove("det-dragging");
+    handle.removeEventListener("pointermove", onMove);
+    handle.removeEventListener("pointerup", onUp);
+    handle.removeEventListener("pointercancel", onUp);
+    _dragState = null;
+    _markDetailsDirty();
+  };
+
+  handle.addEventListener("pointermove", onMove);
+  handle.addEventListener("pointerup", onUp);
+  handle.addEventListener("pointercancel", onUp);
 }
 
 function addDetailsRow(field) {
@@ -419,22 +489,29 @@ function addDetailsRow(field) {
 
   const row = document.createElement("div");
   row.className = "details-editor-row";
-  row.style.cssText = "display:grid;grid-template-columns:160px 60px 1fr 28px;gap:0.3rem;align-items:start;padding:0.45rem 0.9rem;border-bottom:1px solid var(--border);";
+  row.style.cssText = "display:grid;grid-template-columns:20px 160px 1fr 28px;gap:0.3rem;align-items:start;padding:0.45rem 0.9rem;border-bottom:1px solid var(--border);";
   row.innerHTML = `
+    <span class="det-drag-handle" title="Drag to reorder"
+      style="cursor:grab;color:var(--ink-light);font-size:1rem;line-height:1;padding-top:6px;user-select:none;touch-action:none;">⠿</span>
     <input type="text"  class="det-label" placeholder="Field name"  value="${escHtml(field.label || "")}"
       style="font-family:'DM Sans',sans-serif;font-size:0.8rem;padding:0.3rem 0.5rem;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--ink);width:100%;box-sizing:border-box;outline:none;" />
-    <select class="det-wide"
-      style="font-family:'DM Sans',sans-serif;font-size:0.75rem;padding:0.3rem 0.3rem;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--ink);width:100%;outline:none;"
-      title="Width">
-      <option value="false" ${!field.wide ? "selected" : ""}>Half</option>
-      <option value="true"  ${ field.wide ? "selected" : ""}>Full</option>
-    </select>
     <textarea class="det-value" rows="2" placeholder="Value…"
       style="font-family:'DM Sans',sans-serif;font-size:0.8rem;padding:0.3rem 0.5rem;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--ink);width:100%;box-sizing:border-box;resize:vertical;outline:none;min-height:42px;">${escHtml(field.value || "")}</textarea>
     <button type="button" class="rm-details-row" title="Remove"
       style="background:none;border:none;color:var(--ink-light);cursor:pointer;font-size:0.85rem;padding:0.25rem 0.3rem;border-radius:3px;transition:color 0.15s;margin-top:2px;">✕</button>
     <input type="hidden" class="det-key" value="${escHtml(field.key || "")}" />
   `;
+
+  const handle = row.querySelector(".det-drag-handle");
+  handle.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    startRowDrag(handle, row, tbody, e.pointerId);
+  });
+
+  // Mark dirty on any input change
+  row.querySelector(".det-label").addEventListener("input", _markDetailsDirty);
+  row.querySelector(".det-value").addEventListener("input", _markDetailsDirty);
+
   row.querySelector(".rm-details-row").addEventListener("click", () => {
     const keyInp = row.querySelector(".det-key");
     if (keyInp?.value) {
@@ -442,16 +519,24 @@ function addDetailsRow(field) {
       if (chip) { chip.classList.remove("chip-added"); chip.disabled = false; }
     }
     row.remove();
+    _markDetailsDirty();
   });
   row.querySelector(".rm-details-row").addEventListener("mouseover", function() { this.style.color = "#a05050"; });
   row.querySelector(".rm-details-row").addEventListener("mouseout",  function() { this.style.color = ""; });
   tbody.appendChild(row);
 }
 
-function closeDetailsEditor() {
+function closeDetailsEditor(force) {
+  if (!force) {
+    const msg = _detailsDirty
+      ? "You have unsaved changes. Discard them and close?"
+      : "Close the details editor? Any unsaved changes will be lost.";
+    if (!confirm(msg)) return;
+  }
   document.getElementById("details-editor-overlay")?.classList.remove("open");
   document.body.style.overflow = "";
   detailsEditingCharId = null;
+  _detailsDirty = false;
 }
 
 async function handleDetailsFormSubmit(e) {
@@ -463,7 +548,6 @@ async function handleDetailsFormSubmit(e) {
     key:   (row.querySelector(".det-key")?.value   || "").trim() || null,
     label: (row.querySelector(".det-label")?.value || "").trim(),
     value: (row.querySelector(".det-value")?.value || "").trim(),
-    wide:  row.querySelector(".det-wide")?.value === "true",
   })).filter(d => d.label && d.value);
 
   const characters = getCharacters();
@@ -473,7 +557,8 @@ async function handleDetailsFormSubmit(e) {
     characters[idx].updatedAt = new Date().toISOString();
   }
 
-  closeDetailsEditor();
+  _detailsDirty = false;
+  closeDetailsEditor(true);
 
   const character = characters[idx];
   renderDetails(details, character, detailsEditingCharId);
@@ -485,10 +570,12 @@ async function handleDetailsFormSubmit(e) {
 // ══════════════════════════════════════════════════════════════════════
 
 const T = {
-  NODE_R:    30,
-  GAP_H:     56,
-  ROW_H:    110,
-  CANVAS_W: 680,
+  NODE_R:    38,   // slightly larger circles give more room for initials
+  GAP_H:     80,   // extra horizontal gap so wider labels don't collide
+  ROW_H:    130,   // extra vertical gap for 3-line labels
+  CANVAS_W: 1000,  // wider canvas for trees with many members
+  LABEL_W:  110,   // max px width for text wrap
+  LABEL_MAX: 22,   // chars before we start wrapping label
 };
 
 function getTreeMap(character) {
@@ -558,6 +645,30 @@ function renderTree(charId) {
   });
 }
 
+// FIX 4: helper — remove a node entirely from the map if it becomes empty
+// and scrub all references to it from other nodes
+function pruneTreeMap(map, focalKey) {
+  // Remove entries that are completely empty (no parents, partners, children)
+  // but are NOT the focal character
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const [k, nd] of Object.entries(map)) {
+      if (k === focalKey) continue;
+      if (!nd.parents.length && !nd.partners.length && !nd.children.length) {
+        delete map[k];
+        changed = true;
+        // Also scrub references from remaining nodes
+        for (const nd2 of Object.values(map)) {
+          nd2.parents  = nd2.parents.filter(n => n !== k);
+          nd2.partners = nd2.partners.filter(n => n !== k);
+          nd2.children = nd2.children.filter(n => n !== k);
+        }
+      }
+    }
+  }
+}
+
 function showTreeDefaultSidebar(charId) {
   const wrap = document.getElementById("tree-sidebar-wrap");
   if (!wrap) return;
@@ -578,7 +689,8 @@ function showTreeDefaultSidebar(charId) {
 
   function assignRole(names, role) {
     (names || []).forEach(n => {
-      if (n !== focalKey && !treeRoles[n]) treeRoles[n] = role;
+      // FIX 4: only list names that actually exist as keys in the map
+      if (n !== focalKey && !treeRoles[n] && map[n]) treeRoles[n] = role;
     });
   }
 
@@ -588,6 +700,7 @@ function showTreeDefaultSidebar(charId) {
 
   Object.entries(map).forEach(([nodeName, nd]) => {
     if (nodeName === focalKey) return;
+    if (!map[nodeName]) return; // FIX 4: skip pruned nodes
 
     if ((nd.parents || []).some(p => (focalData.parents || []).includes(p))) {
       if (!treeRoles[nodeName]) treeRoles[nodeName] = "Sibling";
@@ -709,7 +822,11 @@ function showNodeEditSidebar(charId, nodeName) {
   const map      = getTreeMap(character);
   const nodeData = map[nodeName] || { parents: [], partners: [], children: [] };
 
-  const suggestions = (character.relationships || []).map(r => r.name).filter(Boolean);
+  // Build suggestions from: (1) names already in the tree map, (2) relationship names —
+  // but exclude names that were removed/pruned from the map so stale entries don't reappear.
+  const mapNames = Object.keys(map).filter(n => n !== nodeName);
+  const relNames = (character.relationships || []).map(r => r.name).filter(Boolean);
+  const suggestions = [...new Set([...mapNames, ...relNames])].filter(Boolean);
 
   function roleSection(roleKey, label, colorClass) {
     const members = nodeData[roleKey] || [];
@@ -763,12 +880,17 @@ function showNodeEditSidebar(charId, nodeName) {
       const map2     = getTreeMap(char2);
       if (!map2[nodeName]) return;
       map2[nodeName][role] = map2[nodeName][role].filter(n => n !== name);
-      if (nodeName !== char2.name) {
-        const nd = map2[nodeName];
-        if (!nd.parents.length && !nd.partners.length && !nd.children.length) {
-          delete map2[nodeName];
-        }
+
+      // FIX 4: also remove the reverse reference
+      if (map2[name]) {
+        if (role === "parents")  map2[name].children = map2[name].children.filter(n => n !== nodeName);
+        if (role === "children") map2[name].parents  = map2[name].parents.filter(n => n !== nodeName);
+        if (role === "partners") map2[name].partners = map2[name].partners.filter(n => n !== nodeName);
       }
+
+      // FIX 4: prune empty non-focal nodes
+      pruneTreeMap(map2, char2.name);
+
       await saveTreeMap(charId, map2);
       showNodeEditSidebar(charId, nodeName);
       redrawTree(charId);
@@ -788,7 +910,12 @@ function showNodeEditSidebar(charId, nodeName) {
       if (!map2[nodeName][role].includes(name)) {
         map2[nodeName][role].push(name);
       }
+      // Add reverse reference so the other node also appears in the map
       if (!map2[name]) map2[name] = { parents: [], partners: [], children: [] };
+      if (role === "parents"  && !map2[name].children.includes(nodeName)) map2[name].children.push(nodeName);
+      if (role === "children" && !map2[name].parents.includes(nodeName))  map2[name].parents.push(nodeName);
+      if (role === "partners" && !map2[name].partners.includes(nodeName)) map2[name].partners.push(nodeName);
+
       await saveTreeMap(charId, map2);
       if (input) input.value = "";
       showNodeEditSidebar(charId, nodeName);
@@ -810,6 +937,42 @@ function showNodeEditSidebar(charId, nodeName) {
 // TREE LAYOUT + SVG DRAWING
 // ══════════════════════════════════════════════════════════════════════
 
+// Wrap a name into ≤3 SVG <tspan> lines, breaking at spaces where possible
+function wrapTreeLabel(name, maxChars) {
+  if (name.length <= maxChars) return [name];
+
+  // Helper: find best space-break index near the midpoint of a string
+  function bestBreak(str) {
+    const mid = Math.floor(str.length / 2);
+    let best = -1, bestDist = Infinity;
+    for (let i = 0; i < str.length; i++) {
+      if (str[i] === " ") {
+        const d = Math.abs(i - mid);
+        if (d < bestDist) { bestDist = d; best = i; }
+      }
+    }
+    return best;
+  }
+
+  const b1 = bestBreak(name);
+  if (b1 === -1) {
+    // No spaces at all — hard-break into two chunks
+    return [name.slice(0, maxChars - 1) + "–", name.slice(maxChars - 1)];
+  }
+
+  const line1 = name.slice(0, b1);
+  const rest  = name.slice(b1 + 1);
+
+  if (rest.length <= maxChars) return [line1, rest];
+
+  // Rest is still long — split it once more
+  const b2 = bestBreak(rest);
+  if (b2 === -1) {
+    return [line1, rest.slice(0, maxChars - 1) + "–", rest.slice(maxChars - 1)];
+  }
+  return [line1, rest.slice(0, b2), rest.slice(b2 + 1)];
+}
+
 function redrawTree(charId) {
   const svg = document.getElementById("tree-svg");
   if (!svg) return;
@@ -829,6 +992,8 @@ function redrawTree(charId) {
 
   function placeNode(name, row) {
     if (placed.has(name)) return;
+    // FIX 4: only place nodes that actually exist in the map (except focal)
+    if (name !== focalKey && !map[name]) return;
     ensureRow(row);
     rowSlots.get(row).push(name);
     placed.set(name, { row });
@@ -836,7 +1001,7 @@ function redrawTree(charId) {
 
   placeNode(focalKey, 0);
 
-  const queue = [{ name: focalKey, row: 0 }];
+  const queue   = [{ name: focalKey, row: 0 }];
   const visited = new Set([focalKey]);
 
   while (queue.length) {
@@ -845,7 +1010,7 @@ function redrawTree(charId) {
     if (!nd) continue;
 
     (nd.parents || []).forEach(p => {
-      if (!visited.has(p)) {
+      if (!visited.has(p) && map[p]) {
         visited.add(p);
         placeNode(p, row - 1);
         queue.push({ name: p, row: row - 1 });
@@ -853,7 +1018,7 @@ function redrawTree(charId) {
     });
 
     (nd.children || []).forEach(c => {
-      if (!visited.has(c)) {
+      if (!visited.has(c) && map[c]) {
         visited.add(c);
         placeNode(c, row + 1);
         queue.push({ name: c, row: row + 1 });
@@ -861,7 +1026,7 @@ function redrawTree(charId) {
     });
 
     (nd.partners || []).forEach(p => {
-      if (!visited.has(p)) {
+      if (!visited.has(p) && map[p]) {
         visited.add(p);
         placeNode(p, row);
       }
@@ -888,7 +1053,9 @@ function redrawTree(charId) {
     });
   });
 
-  const svgH = Y_TOP + (maxRow - minRow) * T.ROW_H + T.NODE_R * 2 + 50;
+  const LABEL_LINE_H = 15;
+  // Allow up to 3 label lines below each node
+  const svgH = Y_TOP + (maxRow - minRow) * T.ROW_H + T.NODE_R * 2 + LABEL_LINE_H * 3 + 50;
 
   let clipIdN = 0;
   const mkCid = () => `tc${++clipIdN}_${Date.now()}`;
@@ -916,7 +1083,9 @@ function redrawTree(charId) {
     const img    = getImg(name);
     const href   = getHref(name);
     const init   = (name[0] || "?").toUpperCase();
-    const label  = name.length > 13 ? name.slice(0,12) + "…" : name;
+
+    // FIX 5: wrap label into up to 2 lines
+    const lines  = wrapTreeLabel(name, T.LABEL_MAX);
 
     defs += `<clipPath id="${cid}"><circle cx="${x}" cy="${y}" r="${r}"/></clipPath>`;
 
@@ -926,24 +1095,31 @@ function redrawTree(charId) {
            font-family="Cormorant Garamond,serif" font-size="${Math.round(r*0.85)}"
            fill="var(--ink-light)">${escHtml(init)}</text>`;
 
-    const ring      = isFocal ? `stroke="var(--ink)" stroke-width="2.5"` : `stroke="var(--border)" stroke-width="1.5"`;
-    const cursor    = _treeEditMode ? `style="cursor:pointer"` : (href ? `style="cursor:pointer"` : "");
-    const dataEdit  = _treeEditMode ? `data-editnode="${escHtml(name)}"` : "";
-    const dataHref  = (!_treeEditMode && href) ? `data-href="${escHtml(href)}"` : "";
+    const ring     = isFocal ? `stroke="var(--ink)" stroke-width="2.5"` : `stroke="var(--border)" stroke-width="1.5"`;
+    const cursor   = _treeEditMode ? `style="cursor:pointer"` : (href ? `style="cursor:pointer"` : "");
+    const dataEdit = _treeEditMode ? `data-editnode="${escHtml(name)}"` : "";
+    const dataHref = (!_treeEditMode && href) ? `data-href="${escHtml(href)}"` : "";
 
     const badge = _treeEditMode ? `
       <circle cx="${x+r-4}" cy="${y-r+4}" r="10" fill="var(--card)" stroke="var(--border)" stroke-width="1"/>
       <text x="${x+r-4}" y="${y-r+4}" text-anchor="middle" dominant-baseline="central"
         font-family="DM Sans,sans-serif" font-size="11" fill="var(--ink-mid)">✎</text>` : "";
 
+    // FIX 5: multi-line label using <tspan>
+    const labelY   = y + r + 16;
+    const tspans   = lines.map((line, i) =>
+      `<tspan x="${x}" dy="${i === 0 ? 0 : LABEL_LINE_H}">${escHtml(line)}</tspan>`
+    ).join("");
+    const labelEl  = `<text x="${x}" y="${labelY}" text-anchor="middle"
+        font-family="DM Sans,sans-serif" font-size="12" font-weight="${isFocal ? '600' : '400'}"
+        fill="${isFocal ? 'var(--ink)' : 'var(--ink-mid)'}">${tspans}</text>`;
+
     return `
       <g class="tree-node" ${cursor} ${dataEdit} ${dataHref}>
         <circle cx="${x}" cy="${y}" r="${r}" fill="var(--card)" ${ring}/>
         ${imgEl}
         ${badge}
-        <text x="${x}" y="${y+r+18}" text-anchor="middle"
-          font-family="DM Sans,sans-serif" font-size="12" font-weight="${isFocal ? '600' : '400'}"
-          fill="${isFocal ? 'var(--ink)' : 'var(--ink-mid)'}">${escHtml(label)}</text>
+        ${labelEl}
       </g>`;
   }
 
@@ -961,23 +1137,27 @@ function redrawTree(charId) {
       fill="none" class="tree-conn"/>`;
   }
 
-  const drawnConns = new Set();
+  const drawnConns    = new Set();
+  const drawnParentBus = new Set(); // track T-bars already drawn for a parent group
   function connKey(a, b) { return [a,b].sort().join("|||"); }
 
+  // Build a lookup: parentName → [childNames that are actually placed]
+  const parentToChildren = new Map();
+  placed.forEach((_, name) => {
+    const nd = map[name];
+    if (!nd) return;
+    (nd.children || []).forEach(cname => {
+      if (!nodePos.get(cname)) return;
+      if (!parentToChildren.has(name)) parentToChildren.set(name, []);
+      if (!parentToChildren.get(name).includes(cname)) parentToChildren.get(name).push(cname);
+    });
+  });
+
+  // Draw partner lines first
   placed.forEach((_, name) => {
     const nd  = map[name];
     const pos = nodePos.get(name);
     if (!nd || !pos) return;
-
-    (nd.parents || []).forEach(pname => {
-      const ppos = nodePos.get(pname);
-      if (!ppos) return;
-      const k = connKey(name, pname);
-      if (drawnConns.has(k)) return;
-      drawnConns.add(k);
-      conns += drawConn(ppos.x, ppos.y + T.NODE_R, pos.x, pos.y - T.NODE_R, "parent");
-    });
-
     (nd.partners || []).forEach(pname => {
       const ppos = nodePos.get(pname);
       if (!ppos) return;
@@ -986,18 +1166,88 @@ function redrawTree(charId) {
       drawnConns.add(k);
       const lx = Math.min(pos.x, ppos.x) + T.NODE_R;
       const rx = Math.max(pos.x, ppos.x) - T.NODE_R;
-      const y  = pos.y;
-      conns += drawConn(lx, y, rx, y, "partner");
+      conns += drawConn(lx, pos.y, rx, pos.y, "partner");
+    });
+  });
+
+  // Draw parent→children connections using T-bar routing when >1 child
+  parentToChildren.forEach((children, parentName) => {
+    const ppos = nodePos.get(parentName);
+    if (!ppos) return;
+
+    // Collect the co-parents of this set of children so we can find
+    // the midpoint between all parents on the same row (for the bar origin)
+    const coParents = new Set([parentName]);
+    children.forEach(cname => {
+      const cnd = map[cname];
+      if (!cnd) return;
+      (cnd.parents || []).forEach(p => { if (nodePos.get(p)) coParents.add(p); });
     });
 
-    (nd.children || []).forEach(cname => {
-      const cpos = nodePos.get(cname);
+    // X origin of the vertical drop: midpoint of all co-parents
+    const coParentXs = Array.from(coParents).map(p => nodePos.get(p)?.x).filter(x => x != null);
+    const originX    = coParentXs.reduce((s, x) => s + x, 0) / coParentXs.length;
+    const originY    = ppos.y + T.NODE_R;
+
+    // Midpoint Y between parent row and child row
+    const anyChildPos = nodePos.get(children[0]);
+    if (!anyChildPos) return;
+    const busY = (originY + (anyChildPos.y - T.NODE_R)) / 2;
+
+    // Avoid duplicating the same bus for co-parent groups
+    const busKey = [...coParents].sort().join("|||") + "|||" + children.sort().join("|||");
+
+    if (children.length === 1) {
+      // Single child — simple bezier, no bus needed
+      const cpos = nodePos.get(children[0]);
       if (!cpos) return;
-      const k = connKey(name, cname);
-      if (drawnConns.has(k)) return;
-      drawnConns.add(k);
-      conns += drawConn(pos.x, pos.y + T.NODE_R, cpos.x, cpos.y - T.NODE_R, "child");
-    });
+      const k = connKey(parentName, children[0]);
+      if (!drawnConns.has(k)) {
+        drawnConns.add(k);
+        conns += drawConn(ppos.x, ppos.y + T.NODE_R, cpos.x, cpos.y - T.NODE_R, "parent");
+      }
+    } else {
+      // Multiple children — T-bar
+      if (!drawnParentBus.has(busKey)) {
+        drawnParentBus.add(busKey);
+
+        // Vertical from each co-parent down to bus
+        coParents.forEach(p => {
+          const pp = nodePos.get(p);
+          if (!pp) return;
+          conns += `<line x1="${pp.x}" y1="${pp.y + T.NODE_R}" x2="${pp.x}" y2="${busY}" class="tree-conn"/>`;
+        });
+
+        // Horizontal bus merging co-parents to a single origin if >1 co-parent
+        if (coParents.size > 1) {
+          const minCPX = Math.min(...coParentXs);
+          const maxCPX = Math.max(...coParentXs);
+          conns += `<line x1="${minCPX}" y1="${busY}" x2="${maxCPX}" y2="${busY}" class="tree-conn"/>`;
+        }
+
+        // Horizontal bus spanning all children
+        const childXs = children.map(c => nodePos.get(c)?.x).filter(x => x != null);
+        const minX    = Math.min(...childXs, originX);
+        const maxX    = Math.max(...childXs, originX);
+        conns += `<line x1="${minX}" y1="${busY}" x2="${maxX}" y2="${busY}" class="tree-conn"/>`;
+
+        // Vertical from bus origin down to bus (only if single parent and not already drawn)
+        if (coParents.size === 1) {
+          conns += `<line x1="${originX}" y1="${ppos.y + T.NODE_R}" x2="${originX}" y2="${busY}" class="tree-conn"/>`;
+        }
+      }
+
+      // Vertical from bus down to each child
+      children.forEach(cname => {
+        const cpos = nodePos.get(cname);
+        if (!cpos) return;
+        const k = connKey(parentName, cname);
+        if (!drawnConns.has(k)) {
+          drawnConns.add(k);
+          conns += `<line x1="${cpos.x}" y1="${busY}" x2="${cpos.x}" y2="${cpos.y - T.NODE_R}" class="tree-conn"/>`;
+        }
+      });
+    }
   });
 
   placed.forEach((_, name) => {
@@ -1268,6 +1518,113 @@ function renderBackgroundHistory(background, history) {
     </div>
   `;
   container.querySelectorAll(".ex-block").forEach(block => wireExpandable(block));
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// OVERVIEW EDITOR MODAL
+// ══════════════════════════════════════════════════════════════════════
+
+let _overviewEditingCharId = null;
+
+function openOverviewEditor(charId) {
+  const overlay = document.getElementById("overview-editor-overlay");
+  if (!overlay) return;
+  _overviewEditingCharId = charId;
+  const character = getCharacters().find(c => c.id === charId);
+  const ovEl = document.getElementById("oef-overview");
+  const bgEl = document.getElementById("oef-background");
+  if (ovEl) ovEl.value = character?.overview  || "";
+  if (bgEl) bgEl.value = character?.background || "";
+  overlay.classList.add("open");
+  document.body.style.overflow = "hidden";
+}
+
+function closeOverviewEditor() {
+  document.getElementById("overview-editor-overlay")?.classList.remove("open");
+  document.body.style.overflow = "";
+  _overviewEditingCharId = null;
+}
+
+async function handleOverviewFormSubmit(e) {
+  e.preventDefault();
+  if (!_overviewEditingCharId) return;
+  const overview   = (document.getElementById("oef-overview")?.value  || "").trim();
+  const background = (document.getElementById("oef-background")?.value || "").trim();
+  const characters = getCharacters();
+  const idx = characters.findIndex(c => c.id === _overviewEditingCharId);
+  if (idx !== -1) {
+    characters[idx].overview   = overview;
+    characters[idx].background = background;
+    characters[idx].history    = "";
+    characters[idx].updatedAt  = new Date().toISOString();
+  }
+  closeOverviewEditor();
+  setFormattedText("char-overview", overview);
+  renderBackgroundHistory(background, "");
+  await saveCharacters(characters);
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// GALLERY EDITOR MODAL
+// ══════════════════════════════════════════════════════════════════════
+
+let _galleryEditingCharId = null;
+
+function addGalleryEditorRow(item) {
+  item = item || {};
+  const tbody = document.getElementById("gallery-editor-rows");
+  if (!tbody) return;
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td><input type="text" class="g-src"        placeholder="Image URL"          value="${escHtml(item.src        || "")}" /></td>
+    <td><input type="text" class="g-caption"    placeholder="Caption"            value="${escHtml(item.caption    || "")}" /></td>
+    <td><input type="text" class="g-characters" placeholder="Names, comma-sep."  value="${escHtml(item.characters || "")}" /></td>
+    <td><input type="text" class="g-year"       placeholder="Year" style="width:70px" value="${escHtml(item.year || "")}" /></td>
+    <td><button type="button" class="rm-gallery-row">✕</button></td>
+  `;
+  tr.querySelector(".rm-gallery-row").addEventListener("click", () => tr.remove());
+  tbody.appendChild(tr);
+}
+
+function openGalleryEditor(charId, addRow) {
+  const overlay = document.getElementById("gallery-editor-overlay");
+  if (!overlay) return;
+  _galleryEditingCharId = charId;
+  const character = getCharacters().find(c => c.id === charId);
+  const tbody = document.getElementById("gallery-editor-rows");
+  if (tbody) {
+    tbody.innerHTML = "";
+    (character?.gallery || []).forEach(item => addGalleryEditorRow(item));
+    if (addRow) addGalleryEditorRow();
+  }
+  overlay.classList.add("open");
+  document.body.style.overflow = "hidden";
+}
+
+function closeGalleryEditor() {
+  document.getElementById("gallery-editor-overlay")?.classList.remove("open");
+  document.body.style.overflow = "";
+  _galleryEditingCharId = null;
+}
+
+async function handleGalleryFormSubmit(e) {
+  e.preventDefault();
+  if (!_galleryEditingCharId) return;
+  const gallery = Array.from(document.querySelectorAll("#gallery-editor-rows tr")).map(tr => ({
+    src:        (tr.querySelector(".g-src")?.value        || "").trim(),
+    caption:    (tr.querySelector(".g-caption")?.value    || "").trim(),
+    characters: (tr.querySelector(".g-characters")?.value || "").trim(),
+    year:       (tr.querySelector(".g-year")?.value       || "").trim(),
+  })).filter(g => g.src);
+  const characters = getCharacters();
+  const idx = characters.findIndex(c => c.id === _galleryEditingCharId);
+  if (idx !== -1) {
+    characters[idx].gallery   = gallery;
+    characters[idx].updatedAt = new Date().toISOString();
+  }
+  closeGalleryEditor();
+  renderGallery(gallery, _galleryEditingCharId);
+  await saveCharacters(characters);
 }
 
 function setText(id, value) {
@@ -1587,7 +1944,9 @@ async function handleFormSubmit(e) {
     updatedAt:     now,
     name,
     fandom,
-    nicknames:     valField("ef-nicknames"),
+    nicknames:     document.getElementById("ef-nicknames")
+                     ? valField("ef-nicknames")
+                     : (existingChar?.nicknames || ""),
     pronouns:      valField("ef-pronouns"),
     age:           valField("ef-age"),
     birthday:      valField("ef-birthday"),
@@ -1612,6 +1971,7 @@ async function handleFormSubmit(e) {
     gallery,
   };
   const characters = getCharacters();
+  const isNew = !editingId;
   if (editingId) {
     const idx = characters.findIndex(c => c.id === editingId);
     if (idx !== -1) characters[idx] = character;
@@ -1619,13 +1979,21 @@ async function handleFormSubmit(e) {
   } else {
     characters.push(character);
   }
+  await saveCharacters(characters);
   closeEditor();
+
+  if (isNew) {
+    // New character — jump straight to its page
+    window.location.href = `character.html?id=${character.id}`;
+    return;
+  }
+
+  // Editing existing — re-render in place
   const container = document.getElementById("char-sections-container");
   if (container) renderIndexSections(container);
   if (document.getElementById("char-name")) {
     loadCharacterPage();
   }
-  await saveCharacters(characters);
 }
 
 async function deleteCharacter(id) {
@@ -1648,7 +2016,7 @@ document.addEventListener("DOMContentLoaded", function () {
   loadIndexPage();
   loadCharacterPage();
 
-  // ── Editor modal (wired here so it works on BOTH index.html and character.html) ──
+  // ── Editor modal  ──
   document.getElementById("editor-close")?.addEventListener("click", closeEditor);
   document.getElementById("editor-close-bottom")?.addEventListener("click", closeEditor);
   document.getElementById("editor-overlay")?.addEventListener("click", e => {
@@ -1672,12 +2040,29 @@ document.addEventListener("DOMContentLoaded", function () {
   document.getElementById("rel-editor-form")?.addEventListener("submit", handleRelFormSubmit);
   document.getElementById("add-rel-row")?.addEventListener("click", () => addRelRow());
 
+  // ── Overview editor ──
+  document.getElementById("overview-editor-close")?.addEventListener("click", closeOverviewEditor);
+  document.getElementById("overview-editor-cancel")?.addEventListener("click", closeOverviewEditor);
+  document.getElementById("overview-editor-overlay")?.addEventListener("click", e => {
+    if (e.target.id === "overview-editor-overlay") closeOverviewEditor();
+  });
+  document.getElementById("overview-editor-form")?.addEventListener("submit", handleOverviewFormSubmit);
+
+  // ── Gallery editor ──
+  document.getElementById("gallery-editor-close")?.addEventListener("click", closeGalleryEditor);
+  document.getElementById("gallery-editor-cancel")?.addEventListener("click", closeGalleryEditor);
+  document.getElementById("gallery-editor-overlay")?.addEventListener("click", e => {
+    if (e.target.id === "gallery-editor-overlay") closeGalleryEditor();
+  });
+  document.getElementById("gallery-editor-form")?.addEventListener("submit", handleGalleryFormSubmit);
+  document.getElementById("add-gallery-editor-row")?.addEventListener("click", () => addGalleryEditorRow());
+
   // ── Details editor ──
-  document.getElementById("details-editor-close")?.addEventListener("click", closeDetailsEditor);
-  document.getElementById("details-editor-cancel")?.addEventListener("click", closeDetailsEditor);
+  document.getElementById("details-editor-close")?.addEventListener("click", () => closeDetailsEditor());
+  document.getElementById("details-editor-cancel")?.addEventListener("click", () => closeDetailsEditor());
   document.getElementById("details-editor-overlay")?.addEventListener("click", e => {
     if (e.target.id === "details-editor-overlay") closeDetailsEditor();
   });
   document.getElementById("details-editor-form")?.addEventListener("submit", handleDetailsFormSubmit);
-  document.getElementById("add-details-row")?.addEventListener("click", () => addDetailsRow());
+  document.getElementById("add-details-row")?.addEventListener("click", () => { addDetailsRow(); _markDetailsDirty(); });
 });

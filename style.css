@@ -595,12 +595,32 @@ footer {
   animation: fadeUp 0.5s 0.1s ease both;
 }
 
+.gallery-heading-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+}
+
+.gallery-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.gallery-add-trigger {
+  font-size: 1rem;
+  padding: 0.18rem 0.55rem;
+}
+
 .gallery-heading {
   font-family: 'Cormorant Garamond', serif;
   font-size: 1.9rem;
   font-weight: 500;
   letter-spacing: -0.01em;
-  margin-bottom: 1.75rem;
+  margin-bottom: 0;
 }
 
 .gallery-grid {
@@ -1644,18 +1664,11 @@ footer {
   color: var(--ink-mid);
 }
 
-/* Role colour chips — shared between default + edit sidebar */
 .tree-sb-role--sibling {
   background: #f0eee8;
   color: #7a6a52;
   border: 1px solid #d8d0c0;
 }
-
-/* ══════════════════════════════════════════════════════════════════════
-   PATCHES — append these to the bottom of style.css
-   ══════════════════════════════════════════════════════════════════════ */
-
-/* ── FIX 1: Carousel (replaces .char-scroll-row) ── */
 
 .char-section-right {
   display: flex;
@@ -1694,7 +1707,7 @@ footer {
 }
 
 .char-carousel-wrap {
-  overflow: hidden; /* hide scrollbar entirely */
+  overflow: hidden;
   position: relative;
 }
 
@@ -1720,10 +1733,7 @@ footer {
   scroll-snap-align: start;
 }
 
-/* ── FIX 2: Masonry gallery (no gaps between images) ── */
-
 .gallery-grid {
-  /* Override the old grid with CSS columns for masonry */
   display: block;
   columns: 3 260px;
   column-gap: 1.25rem;
@@ -1740,7 +1750,6 @@ footer {
 .gallery-item {
   break-inside: avoid;
   margin-bottom: 1.25rem;
-  /* Reset the old flex column so images flow naturally */
   display: flex;
   flex-direction: column;
 }
@@ -1749,16 +1758,12 @@ footer {
   width: 100%;
   height: auto;
   display: block;
-  object-fit: contain; /* keep full image, no crop */
+  object-fit: contain; 
 }
-
-/* ── FIX 4: Remove card actions area entirely (no edit/delete on cards) ── */
 
 .char-card-actions {
   display: none;
 }
-
-/* ── FIX 4: Delete button in editor footer ── */
 
 .editor-actions {
   display: flex;
@@ -1769,7 +1774,7 @@ footer {
 }
 
 .editor-delete-zone {
-  margin-right: auto; /* push delete to the left, save/cancel to the right */
+  margin-right: auto;
 }
 
 .editor-btn-delete {
@@ -1790,19 +1795,6 @@ footer {
   border-color: #b07070;
 }
 
-/*
-  style.css PATCH — details editor modal scroll fix
-  ==================================================
-  Find the "FIX 5" section at the bottom of your style.css and
-  REPLACE everything from the #details-editor-overlay block onward
-  with the rules below. If you already have a .details-preset-grid
-  or #details-editor-rows rule anywhere else in style.css, remove
-  those too — these are the only ones that should exist.
-*/
-
-/* ── Details editor: proper fixed-height flex layout ── */
-
-/* Modal: capped, flex column so the form can fill it */
 #details-editor-overlay .editor-modal {
   max-height: calc(100vh - 4rem);
   display: flex;
@@ -1810,30 +1802,26 @@ footer {
   overflow: hidden;
 }
 
-/* Form fills remaining modal height; the form itself does NOT scroll */
 #details-editor-overlay .editor-form {
   flex: 1;
-  min-height: 0;        /* lets flex child shrink past content size */
+  min-height: 0;   
   overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
   padding: 1.25rem 1.5rem;
-  max-height: none;     /* override global .editor-form cap */
+  max-height: none; 
 }
 
-/* Hint line: never grows or shrinks */
 #details-editor-overlay .details-editor-hint {
   flex-shrink: 0;
 }
 
-/* Chips section: fixed size, never compressed when rows grow */
 #details-editor-overlay .details-preset-section {
   flex-shrink: 0;
   overflow: hidden;
 }
 
-/* Chips area: fixed 2-row height, scrolls internally */
 .details-preset-grid {
   display: flex;
   flex-wrap: wrap;
@@ -1843,27 +1831,44 @@ footer {
   overflow-y: auto;
 }
 
-/* Fields section: the ONLY part that grows to fill space and scrolls */
 .details-custom-section {
-  flex: 1;              /* takes all leftover vertical space */
-  min-height: 0;        /* critical — without this flex ignores overflow */
+  flex: 1;             
+  min-height: 0;        
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
-/* Rows list: fills the fields section entirely, scrolls when full */
 #details-editor-rows {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  max-height: none;     /* flex parent controls height, not a hard cap */
+  max-height: none; 
   padding: 0.25rem 0;
 }
 
-/* Add-field button + action bar: pinned at bottom, never grow */
+
 #details-editor-overlay .add-gallery-btn,
 #details-editor-overlay .editor-actions {
   flex-shrink: 0;
 }
 
+.details-editor-row.det-dragging {
+  opacity: 0.5;
+  background: var(--surface);
+  border-radius: 4px;
+  cursor: grabbing;
+}
+
+.details-grid {
+  align-items: start;
+}
+
+.details-label {
+  max-width: 100%;
+  word-break: break-word;
+}
+
+.details-editor-row input.det-label {
+  min-width: 0;
+}
