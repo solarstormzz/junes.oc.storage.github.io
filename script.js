@@ -75,15 +75,17 @@ async function loadFromGist() {
 
 async function saveCharacters(list) {
   localStorage.setItem(STORAGE_LOCAL, JSON.stringify(list));
-  if (!isConnected()) return;
+  if (!isConnected()) return true;
   setStatus("syncing");
   try {
     await gistPut(list);
     const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     setStatus("ok", `Last synced ${now}`);
+    return true;
   } catch (err) {
     setStatus("error", err.message);
     console.error("Gist save error:", err);
+    return false;
   }
 }
 
@@ -189,6 +191,8 @@ function updateSettingsBtnStyle() {
 // CHARACTER PAGE
 // ══════════════════════════════════════════════════════════════════════
 
+let _charPageWired = false;
+
 function loadCharacterPage() {
   if (!document.getElementById("char-name")) return;
 
@@ -225,11 +229,17 @@ function loadCharacterPage() {
   }
 
   renderGallery(character.gallery || [], id);
+  renderOtherArt(character.otherArt || []);
   document.title = (character.name || "Character") + " — Character Sheet";
 
-  initOverviewTabs(id);
   renderRelationships(character.relationships || [], id);
   renderDetails(character.details || [], character, id);
+
+  // loadCharacterPage() runs again after every edit — only attach listeners the first time,
+  // otherwise every click fires multiple times.
+  if (_charPageWired) return;
+  _charPageWired = true;
+  initOverviewTabs(id);
 
   document.getElementById("char-page-edit-btn")
     ?.addEventListener("click", () => openCharPageEditor(id));
@@ -243,6 +253,14 @@ function loadCharacterPage() {
     ?.addEventListener("click", () => openGalleryEditor(id));
   document.getElementById("gallery-add-btn")
     ?.addEventListener("click", () => openGalleryEditor(id, true));
+  document.getElementById("otherart-edit-btn")
+    ?.addEventListener("click", () => openOtherArtEditor(id));
+  document.getElementById("otherart-add-btn")
+    ?.addEventListener("click", () => openOtherArtEditor(id, true));
+}
+
+function pageCharId() {
+  return new URLSearchParams(window.location.search).get("id");
 }
 
 function renderAllLinks(links, customLinks) {
@@ -563,6 +581,8 @@ async function handleDetailsFormSubmit(e) {
   const idx = characters.findIndex(c => c.id === detailsEditingCharId);
   if (idx !== -1) {
     characters[idx].details   = details;
+    // Nicknames now live only in Details (any existing one was loaded into the editor as a row)
+    characters[idx].nicknames = "";
     characters[idx].updatedAt = new Date().toISOString();
   }
 
@@ -1653,7 +1673,7 @@ function setFormattedText(id, value) {
 // ══════════════════════════════════════════════════════════════════════
 
 function renderGallery(ownGallery, currentCharId) {
-  const grid = document.querySelector(".gallery-grid");
+  const grid = document.querySelector("#gallery .gallery-grid");
   if (!grid) return;
   const allChars    = getCharacters();
   const currentChar = allChars.find(c => c.id === currentCharId);
@@ -1688,6 +1708,96 @@ function renderGallery(ownGallery, currentCharId) {
       </div>
     </div>
   `).join("");
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// ART BY OTHERS
+// ══════════════════════════════════════════════════════════════════════
+
+function renderOtherArt(items) {
+  const grid = document.getElementById("otherart-grid");
+  if (!grid) return;
+  const sorted = [...(items || [])].sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0));
+  if (!sorted.length) {
+    grid.innerHTML = "<p style='padding:1rem;opacity:.5;font-style:italic'>No art by others yet.</p>";
+    return;
+  }
+  grid.innerHTML = sorted.map(item => `
+    <div class="gallery-item">
+      <div class="gallery-img-wrap">
+        <img src="${escHtml(item.src)}" alt="${escHtml(item.caption || '')}" loading="lazy" />
+      </div>
+      <div class="gallery-meta">
+        <div>
+          <span class="gallery-caption">${escHtml(item.caption || "")}</span>
+          ${item.artist ? `<div class="gallery-artist">Art by ${escHtml(item.artist)}</div>` : ""}
+        </div>
+        <div class="gallery-meta-right">
+          ${item.year ? `<span class="gallery-year">${escHtml(item.year)}</span>` : ""}
+        </div>
+      </div>
+    </div>
+  `).join("");
+}
+
+let _otherArtEditingCharId = null;
+
+function addOtherArtEditorRow(item) {
+  item = item || {};
+  const tbody = document.getElementById("otherart-editor-rows");
+  if (!tbody) return;
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td><input type="text" class="oa-src"     placeholder="Image URL" value="${escHtml(item.src     || "")}" /></td>
+    <td><input type="text" class="oa-caption" placeholder="Caption"   value="${escHtml(item.caption || "")}" /></td>
+    <td><input type="text" class="oa-artist"  placeholder="Artist"    value="${escHtml(item.artist  || "")}" /></td>
+    <td><input type="text" class="oa-year"    placeholder="Year" style="width:70px" value="${escHtml(item.year || "")}" /></td>
+    <td><button type="button" class="rm-gallery-row">✕</button></td>
+  `;
+  tr.querySelector(".rm-gallery-row").addEventListener("click", () => tr.remove());
+  tbody.appendChild(tr);
+}
+
+function openOtherArtEditor(charId, addRow) {
+  const overlay = document.getElementById("otherart-editor-overlay");
+  if (!overlay) return;
+  _otherArtEditingCharId = charId;
+  const character = getCharacters().find(c => c.id === charId);
+  const tbody = document.getElementById("otherart-editor-rows");
+  if (tbody) {
+    tbody.innerHTML = "";
+    (character?.otherArt || []).forEach(item => addOtherArtEditorRow(item));
+    if (addRow) addOtherArtEditorRow();
+  }
+  overlay.classList.add("open");
+  document.body.style.overflow = "hidden";
+}
+
+function closeOtherArtEditor() {
+  document.getElementById("otherart-editor-overlay")?.classList.remove("open");
+  document.body.style.overflow = "";
+  _otherArtEditingCharId = null;
+}
+
+async function handleOtherArtFormSubmit(e) {
+  e.preventDefault();
+  if (!_otherArtEditingCharId) return;
+  const charId = _otherArtEditingCharId;
+  const otherArt = Array.from(document.querySelectorAll("#otherart-editor-rows tr")).map(tr => ({
+    src:     (tr.querySelector(".oa-src")?.value     || "").trim(),
+    caption: (tr.querySelector(".oa-caption")?.value || "").trim(),
+    artist:  (tr.querySelector(".oa-artist")?.value  || "").trim(),
+    year:    (tr.querySelector(".oa-year")?.value    || "").trim(),
+  })).filter(g => g.src);
+  const characters = getCharacters();
+  const idx = characters.findIndex(c => c.id === charId);
+  if (idx !== -1) {
+    characters[idx].otherArt  = otherArt;
+    characters[idx].updatedAt = new Date().toISOString();
+  }
+  closeOtherArtEditor();
+  renderOtherArt(otherArt);
+  await saveCharacters(characters);
 }
 
 function openCharPageEditor(id) {
@@ -1857,15 +1967,11 @@ function openEditor(id) {
   editingId = id;
   const c = id ? getCharacters().find(x => x.id === id) : null;
   const fields = [
-    "name","fandom","nicknames","pronouns","age","birthday",
+    "name","fandom","pronouns","age","birthday",
     "heritage","occupation","refImage","titleImage","appearance","overview",
     "background",
     "links.unvale","links.characterhub","links.artfight","links.spotify"
   ];
-  if (c?.history && !c.background?.includes(c.history)) {
-    const mergedEl = document.getElementById("ef-background");
-    if (mergedEl) mergedEl.value = [c.background, c.history].filter(Boolean).join("\n\n");
-  }
   fields.forEach(key => {
     const el = document.getElementById("ef-" + key.replace(".", "_"));
     if (!el) return;
@@ -1873,6 +1979,11 @@ function openEditor(id) {
       ? (c?.links?.[key.split(".")[1]] || "")
       : (c?.[key] || "");
   });
+  // Merge legacy "history" into the single background box (must run AFTER the loop above)
+  if (c?.history && !c.background?.includes(c.history)) {
+    const mergedEl = document.getElementById("ef-background");
+    if (mergedEl) mergedEl.value = [c.background, c.history].filter(Boolean).join("\n\n");
+  }
   const galleryBody = document.getElementById("gallery-rows");
   if (galleryBody) {
     galleryBody.innerHTML = "";
@@ -1930,104 +2041,157 @@ function addCustomLinkRow(link) {
   tbody.appendChild(tr);
 }
 
+let _savingCharacter = false;
+
 async function handleFormSubmit(e) {
   e.preventDefault();
+  // Guard against double-submits (double click / Enter twice while the GitHub sync is in flight).
+  // Each extra submit of a NEW character used to create another copy with a fresh id.
+  if (_savingCharacter) return;
+
   const valField = id => (document.getElementById(id)?.value || "").trim();
   const name   = valField("ef-name");
   const fandom = valField("ef-fandom");
   if (!name || !fandom) { alert("A Name and Fandom are both required before saving a character."); return; }
-  const gallery = Array.from(document.querySelectorAll("#gallery-rows tr")).map(tr => ({
-    src:        (tr.querySelector(".g-src")?.value        || "").trim(),
-    caption:    (tr.querySelector(".g-caption")?.value    || "").trim(),
-    characters: (tr.querySelector(".g-characters")?.value || "").trim(),
-    year:       (tr.querySelector(".g-year")?.value       || "").trim(),
-  })).filter(g => g.src);
-  const customLinks = Array.from(document.querySelectorAll("#custom-link-rows tr")).map(tr => ({
-    title: (tr.querySelector(".cl-title")?.value || "").trim(),
-    url:   (tr.querySelector(".cl-url")?.value   || "").trim(),
-  })).filter(l => l.url);
-  const now          = new Date().toISOString();
-  const existingChar = editingId ? getCharacters().find(c => c.id === editingId) : null;
-  const character = {
-    id:            editingId || generateId(),
-    updatedAt:     now,
-    name,
-    fandom,
-    nicknames:     document.getElementById("ef-nicknames")
-                     ? valField("ef-nicknames")
-                     : (existingChar?.nicknames || ""),
-    pronouns:      valField("ef-pronouns"),
-    age:           valField("ef-age"),
-    birthday:      valField("ef-birthday"),
-    heritage:      valField("ef-heritage"),
-    occupation:    valField("ef-occupation"),
-    titleImage:    valField("ef-titleImage"),
-    refImage:      valField("ef-refImage"),
-    appearance:    valField("ef-appearance"),
-    overview:      valField("ef-overview"),
-    background:    valField("ef-background"),
-    history:       "",
-    relationships: existingChar?.relationships || [],
-    treeData:      existingChar?.treeData      || {},
-    details:       existingChar?.details       || [],
-    links: {
-      unvale:       valField("ef-links_unvale"),
-      characterhub: valField("ef-links_characterhub"),
-      artfight:     valField("ef-links_artfight"),
-      spotify:      valField("ef-links_spotify"),
-    },
-    customLinks,
-    gallery,
-  };
-  const characters = getCharacters();
-  const isNew = !editingId;
-  if (editingId) {
-    const idx = characters.findIndex(c => c.id === editingId);
-    if (idx !== -1) characters[idx] = character;
-    else characters.push(character);
-  } else {
-    characters.push(character);
-  }
-  await saveCharacters(characters);
-  closeEditor();
 
-  if (isNew) {
-    // New character — jump straight to its page
-    window.location.href = `character.html?id=${character.id}`;
-    return;
-  }
+  _savingCharacter = true;
+  const submitBtn = document.querySelector('#char-editor-form button[type="submit"]');
+  if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "Saving…"; }
 
-  // Editing existing — re-render in place
-  const container = document.getElementById("char-sections-container");
-  if (container) renderIndexSections(container);
-  if (document.getElementById("char-name")) {
-    loadCharacterPage();
+  try {
+    const existingChar = editingId ? getCharacters().find(c => c.id === editingId) : null;
+
+    // The character-page editor has no gallery table, so keep the saved gallery when the table isn't there.
+    const galleryBody = document.getElementById("gallery-rows");
+    const gallery = galleryBody
+      ? Array.from(galleryBody.querySelectorAll("tr")).map(tr => ({
+          src:        (tr.querySelector(".g-src")?.value        || "").trim(),
+          caption:    (tr.querySelector(".g-caption")?.value    || "").trim(),
+          characters: (tr.querySelector(".g-characters")?.value || "").trim(),
+          year:       (tr.querySelector(".g-year")?.value       || "").trim(),
+        })).filter(g => g.src)
+      : (existingChar?.gallery || []);
+
+    const customLinks = Array.from(document.querySelectorAll("#custom-link-rows tr")).map(tr => ({
+      title: (tr.querySelector(".cl-title")?.value || "").trim(),
+      url:   (tr.querySelector(".cl-url")?.value   || "").trim(),
+    })).filter(l => l.url);
+
+    const now = new Date().toISOString();
+    const character = {
+      // Start from the saved character so anything the editor doesn't show
+      // (stories, relationships, treeData, details, createdAt, …) is kept.
+      ...(existingChar || {}),
+      id:            editingId || generateId(),
+      updatedAt:     now,
+      name,
+      fandom,
+      nicknames:     existingChar?.nicknames || "",   // managed from the Details tab now
+      pronouns:      valField("ef-pronouns"),
+      age:           valField("ef-age"),
+      birthday:      valField("ef-birthday"),
+      heritage:      valField("ef-heritage"),
+      occupation:    valField("ef-occupation"),
+      titleImage:    valField("ef-titleImage"),
+      refImage:      valField("ef-refImage"),
+      appearance:    valField("ef-appearance"),
+      overview:      valField("ef-overview"),
+      background:    valField("ef-background"),
+      history:       "",
+      relationships: existingChar?.relationships || [],
+      treeData:      existingChar?.treeData      || {},
+      details:       existingChar?.details       || [],
+      stories:       existingChar?.stories       || [],
+      links: {
+        unvale:       valField("ef-links_unvale"),
+        characterhub: valField("ef-links_characterhub"),
+        artfight:     valField("ef-links_artfight"),
+        spotify:      valField("ef-links_spotify"),
+      },
+      customLinks,
+      gallery,
+    };
+
+    const characters = getCharacters();
+    const isNew = !editingId;
+    if (editingId) {
+      const idx = characters.findIndex(c => c.id === editingId);
+      if (idx !== -1) characters[idx] = character;
+      else characters.push(character);
+    } else {
+      characters.push(character);
+    }
+    await saveCharacters(characters);
+    closeEditor();
+
+    if (isNew) {
+      // Leave _savingCharacter set: the page is navigating away, so no further submits.
+      window.location.href = `character.html?id=${character.id}`;
+      return;
+    }
+
+    // Editing existing — re-render in place
+    const container = document.getElementById("char-sections-container");
+    if (container) renderIndexSections(container);
+    if (document.getElementById("char-name")) {
+      loadCharacterPage();
+    }
+  } catch (err) {
+    console.error("Save error:", err);
+    alert("Something went wrong while saving: " + err.message);
   }
+  _savingCharacter = false;
+  if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = "Save Character"; }
 }
 
 async function deleteCharacter(id) {
   if (!confirm("Delete this character? This cannot be undone.")) return;
   const characters = getCharacters().filter(c => c.id !== id);
   closeEditor();
-  const container  = document.getElementById("char-sections-container");
+  // Wait for the GitHub write to finish BEFORE navigating away. Otherwise the page
+  // unloads mid-request, the Gist keeps the old list, and the next index load
+  // pulls the "deleted" character straight back from the Gist.
+  const ok = await saveCharacters(characters);
+  if (!ok) {
+    alert("The character was removed on this device, but syncing to GitHub failed — it may reappear after a refresh. Check the sync icon and try again.");
+  }
+  const container = document.getElementById("char-sections-container");
   if (container) renderIndexSections(container);
   if (document.getElementById("char-name")) {
     window.location.href = "index.html";
   }
-  await saveCharacters(characters);
 }
 
 // ══════════════════════════════════════════════════════════════════════
 // STORIES
 // ══════════════════════════════════════════════════════════════════════
 
+function splitTags(str) {
+  return (str || "").split(",").map(t => t.trim().toLowerCase()).filter(Boolean);
+}
+
 function renderStories(charId) {
   const panel = document.getElementById("panel-stories");
   if (!panel) return;
-  const character = getCharacters().find(c => c.id === charId);
-  const stories   = character?.stories || [];
+  const all       = getCharacters();
+  const character = all.find(c => c.id === charId);
+  const myName    = (character?.name || "").toLowerCase().trim();
 
-  if (!stories.length) {
+  const items = (character?.stories || []).map(story => ({ story, ownerId: charId, ownerName: "" }));
+
+  // Stories on other characters' pages that tag this character
+  if (myName) {
+    all.forEach(c => {
+      if (c.id === charId) return;
+      (c.stories || []).forEach(story => {
+        if (splitTags(story.characters).includes(myName)) {
+          items.push({ story, ownerId: c.id, ownerName: c.name || "Unnamed" });
+        }
+      });
+    });
+  }
+
+  if (!items.length) {
     panel.innerHTML = `
       <p class="stories-empty-state">No stories yet.
         <button class="rel-empty-add-btn" id="stories-empty-add-btn">Add one</button>
@@ -2039,14 +2203,15 @@ function renderStories(charId) {
 
   const grid = document.createElement("div");
   grid.className = "stories-grid";
-  stories.forEach(story => {
+  items.forEach(({ story, ownerId, ownerName }) => {
     const card = document.createElement("div");
     card.className = "story-card";
     card.innerHTML = `
       <span class="story-card-title">${escHtml(story.title || "Untitled")}</span>
       ${story.subtitle ? `<span class="story-card-subtitle">${escHtml(story.subtitle)}</span>` : ""}
+      ${ownerName ? `<span class="story-card-tag" title="From ${escHtml(ownerName)}'s stories">w/ ${escHtml(ownerName)}</span>` : ""}
     `;
-    card.addEventListener("click", () => openStoryReader(charId, story.id));
+    card.addEventListener("click", () => openStoryReader(ownerId, story.id));
     grid.appendChild(card);
   });
   panel.innerHTML = "";
@@ -2072,6 +2237,28 @@ function openStoryReader(charId, storyId) {
   document.getElementById("story-reader-subtitle").textContent = story.subtitle || "";
   document.getElementById("story-reader-subtitle").style.display = story.subtitle ? "" : "none";
   document.getElementById("story-reader-body").textContent     = story.body     || "";
+
+  // Meta line: who the story belongs to (if not this page) + tagged characters, linked where possible
+  const metaEl = document.getElementById("story-reader-meta");
+  if (metaEl) {
+    const allChars = getCharacters();
+    const pageId   = pageCharId();
+    const parts = [];
+    if (character && charId !== pageId) {
+      parts.push(`From <a href="character.html?id=${escHtml(character.id)}">${escHtml(character.name || "Unnamed")}</a>'s stories`);
+    }
+    const tagNames = (story.characters || "").split(",").map(t => t.trim()).filter(Boolean);
+    if (tagNames.length) {
+      const links = tagNames.map(n => {
+        const m = allChars.find(c => (c.name || "").toLowerCase().trim() === n.toLowerCase());
+        return m && m.id !== pageId
+          ? `<a href="character.html?id=${escHtml(m.id)}">${escHtml(n)}</a>`
+          : escHtml(n);
+      });
+      parts.push(`Featuring ${links.join(", ")}`);
+    }
+    metaEl.innerHTML = parts.join(" · ");
+  }
 
   overlay.classList.add("open");
   document.body.style.overflow = "hidden";
@@ -2107,6 +2294,14 @@ function openStoryEditor(charId, storyId) {
   document.getElementById("sef-title").value    = story?.title    || "";
   document.getElementById("sef-subtitle").value = story?.subtitle || "";
   document.getElementById("sef-body").value     = story?.body     || "";
+  const tagInput = document.getElementById("sef-characters");
+  if (tagInput) tagInput.value = story?.characters || "";
+  const tagList = document.getElementById("sef-characters-list");
+  if (tagList) {
+    tagList.innerHTML = getCharacters()
+      .filter(c => c.id !== charId && c.name)
+      .map(c => `<option value="${escHtml(c.name)}">`).join("");
+  }
 
   const deleteBtn = document.getElementById("story-editor-delete-btn");
   if (deleteBtn) deleteBtn.style.display = storyId ? "" : "none";
@@ -2131,6 +2326,8 @@ async function handleStoryFormSubmit(e) {
   const title    = (document.getElementById("sef-title")?.value    || "").trim();
   const subtitle = (document.getElementById("sef-subtitle")?.value || "").trim();
   const body     = (document.getElementById("sef-body")?.value     || "").trim();
+  const tagged   = (document.getElementById("sef-characters")?.value || "")
+    .split(",").map(t => t.trim()).filter(Boolean).join(", ");
 
   if (!title) { alert("Please give your story a title."); return; }
 
@@ -2144,15 +2341,17 @@ async function handleStoryFormSubmit(e) {
   if (_storyEditingStoryId) {
     const sIdx = characters[idx].stories.findIndex(s => s.id === _storyEditingStoryId);
     if (sIdx !== -1) {
-      characters[idx].stories[sIdx] = { ...characters[idx].stories[sIdx], title, subtitle, body, updatedAt: now };
+      characters[idx].stories[sIdx] = { ...characters[idx].stories[sIdx], title, subtitle, body, characters: tagged, updatedAt: now };
     }
   } else {
-    characters[idx].stories.push({ id: generateId(), title, subtitle, body, createdAt: now, updatedAt: now });
+    characters[idx].stories.push({ id: generateId(), title, subtitle, body, characters: tagged, createdAt: now, updatedAt: now });
   }
   characters[idx].updatedAt = now;
 
+  // Re-render the story list of the page we're ON (the story may belong to another character)
+  const renderFor = pageCharId() || _storyEditingCharId;
   closeStoryEditor();
-  renderStories(_storyEditingCharId || characters[idx].id);
+  renderStories(renderFor);
   await saveCharacters(characters);
 }
 
@@ -2165,7 +2364,7 @@ async function deleteStory(charId, storyId) {
     characters[idx].updatedAt = new Date().toISOString();
   }
   closeStoryEditor();
-  renderStories(charId);
+  renderStories(pageCharId() || charId);
   await saveCharacters(characters);
 }
 
@@ -2217,6 +2416,15 @@ document.addEventListener("DOMContentLoaded", function () {
   });
   document.getElementById("gallery-editor-form")?.addEventListener("submit", handleGalleryFormSubmit);
   document.getElementById("add-gallery-editor-row")?.addEventListener("click", () => addGalleryEditorRow());
+
+  // ── Art by others editor ──
+  document.getElementById("otherart-editor-close")?.addEventListener("click", closeOtherArtEditor);
+  document.getElementById("otherart-editor-cancel")?.addEventListener("click", closeOtherArtEditor);
+  document.getElementById("otherart-editor-overlay")?.addEventListener("click", e => {
+    if (e.target.id === "otherart-editor-overlay") closeOtherArtEditor();
+  });
+  document.getElementById("otherart-editor-form")?.addEventListener("submit", handleOtherArtFormSubmit);
+  document.getElementById("add-otherart-editor-row")?.addEventListener("click", () => addOtherArtEditorRow());
 
   // ── Details editor ──
   document.getElementById("details-editor-close")?.addEventListener("click", () => closeDetailsEditor());

@@ -590,9 +590,14 @@ footer {
    GALLERY
 ══════════════════════════════════════════ */
 
-#gallery {
+#gallery,
+#art-by-others {
   padding: 3rem 3rem 4rem;
   animation: fadeUp 0.5s 0.1s ease both;
+}
+
+#art-by-others {
+  padding-top: 0;
 }
 
 .gallery-heading-row {
@@ -1190,8 +1195,13 @@ footer {
     gap: 0.6rem;
   }
 
-  #gallery {
+  #gallery,
+  #art-by-others {
     padding: 2rem 1.25rem 3rem;
+  }
+
+  #art-by-others {
+    padding-top: 0;
   }
 
   .gallery-grid {
@@ -1985,4 +1995,43 @@ footer {
   color: var(--ink);
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* ── Art by others: artist credit ── */
+.gallery-artist {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.72rem;
+  font-style: italic;
+  color: var(--ink-mid);
+}
+
+/* ── Stories: tagged-character badge + reader meta ── */
+.story-card-tag {
+  align-self: flex-start;
+  margin-top: 0.35rem;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--ink-light);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 0.1rem 0.5rem;
+  white-space: nowrap;
+}
+
+.story-reader-meta {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.72rem;
+  color: var(--ink-light);
+  margin-top: 0.3rem;
+}
+
+.story-reader-meta:empty { display: none; }
+
+.story-reader-meta a {
+  color: var(--ink-mid);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
