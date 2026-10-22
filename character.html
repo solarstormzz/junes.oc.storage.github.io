@@ -53,6 +53,35 @@
       }
     }
 
+
+    /* ── Ref sheet carousel ── */
+    .char-ref-wrap { position: relative; }
+    .ref-nav-btn {
+      position: absolute; top: 50%; transform: translateY(-50%);
+      width: 34px; height: 34px; border-radius: 50%;
+      border: 1px solid var(--border); background: rgba(245,242,238,0.88);
+      color: var(--ink-mid); font-size: 1.2rem; line-height: 1;
+      display: none; align-items: center; justify-content: center;
+      cursor: pointer; z-index: 2; padding: 0 0 2px;
+      transition: background 0.15s, color 0.15s, opacity 0.15s; opacity: 0.85;
+    }
+    .ref-nav-btn:hover { background: var(--card); color: var(--ink); opacity: 1; }
+    .ref-nav-prev { left: 8px; }
+    .ref-nav-next { right: 8px; }
+    .char-ref-wrap.has-multiple .ref-nav-btn { display: flex; }
+    .ref-caption {
+      position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%);
+      display: none; align-items: center; gap: 0.5rem;
+      font-family: 'DM Sans', sans-serif; font-size: 0.72rem; color: var(--ink-mid);
+      background: rgba(245,242,238,0.88); border: 1px solid var(--border);
+      border-radius: 20px; padding: 0.15rem 0.65rem; z-index: 2; white-space: nowrap;
+      max-width: 90%;
+    }
+    .char-ref-wrap.has-multiple .ref-caption { display: inline-flex; }
+    .ref-dots { display: inline-flex; gap: 0.3rem; }
+    .ref-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); border: none; padding: 0; cursor: pointer; }
+    .ref-dot.active { background: var(--ink-mid); }
+
     /* ── Edit button ── */
     .char-nav-edit-btn {
       display: inline-flex; align-items: center;
@@ -625,8 +654,8 @@
 
   <nav class="char-nav">
     <a href="index.html" class="char-nav-back">Back</a>
+    <button id="char-page-edit-btn" class="char-nav-edit-btn">Edit</button>
     <div class="char-nav-tabs">
-      <button id="char-page-edit-btn" class="char-nav-edit-btn">Edit</button>
       <a href="#info" class="char-nav-tab active">Info</a>
       <a href="#gallery" class="char-nav-tab">Gallery</a>
       <a href="#art-by-others" class="char-nav-tab">Art by Others</a>
@@ -660,6 +689,8 @@
           <li id="char-unvale-li"><a href="#" id="char-unvale">Unvale</a></li>
           <li id="char-characterhub-li"><a href="#" id="char-characterhub">CharacterHub</a></li>
           <li id="char-artfight-li"><a href="#" id="char-artfight">Artfight</a></li>
+          <li id="char-artattack-li"><a href="#" id="char-artattack">Art Attack</a></li>
+          <li id="char-toyhouse-li"><a href="#" id="char-toyhouse">Toyhou.se</a></li>
           <li id="char-spotify-li"><a href="#" id="char-spotify">Playlist</a></li>
         </ul>
       </aside>
@@ -914,6 +945,18 @@
         </fieldset>
 
         <fieldset class="editor-fieldset">
+          <legend>Additional Reference Sheets</legend>
+          <p class="editor-field-hint" style="margin-bottom:0.5rem">Extra sheets come after the main Ref Image above and can be cycled through with arrows on the character page.</p>
+          <table class="gallery-editor-table">
+            <thead>
+              <tr><th>Image URL</th><th>Label (optional)</th><th></th></tr>
+            </thead>
+            <tbody id="ref-extra-rows"></tbody>
+          </table>
+          <button type="button" id="add-ref-extra-row" class="add-gallery-btn">+ Add Ref Sheet</button>
+        </fieldset>
+
+        <fieldset class="editor-fieldset">
           <legend>Appearance</legend>
           <label class="editor-label-full">
             <textarea id="ef-appearance" rows="3" placeholder="Describe the character's appearance..."></textarea>
@@ -940,6 +983,10 @@
           <div class="editor-row">
             <label>Artfight URL <input type="url" id="ef-links_artfight" placeholder="https://..." /></label>
             <label>Spotify Playlist <input type="url" id="ef-links_spotify" placeholder="https://..." /></label>
+          </div>
+          <div class="editor-row">
+            <label>Art Attack URL <input type="url" id="ef-links_artattack" placeholder="https://..." /></label>
+            <label>Toyhou.se URL <input type="url" id="ef-links_toyhouse" placeholder="https://..." /></label>
           </div>
         </fieldset>
 

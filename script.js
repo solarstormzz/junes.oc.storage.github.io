@@ -219,14 +219,7 @@ function loadCharacterPage() {
   renderBackgroundHistory(character.background, character.history);
   setFormattedText("char-overview", character.overview);
 
-  const refWrap = document.querySelector(".char-ref-wrap");
-  const img     = document.querySelector(".char-ref");
-  if (character.refImage && refWrap && img) {
-    img.src = character.refImage;
-    refWrap.style.display = "block";
-  } else if (refWrap) {
-    refWrap.style.display = "none";
-  }
+  renderRefCarousel(character);
 
   renderGallery(character.gallery || [], id);
   renderOtherArt(character.otherArt || []);
@@ -259,6 +252,85 @@ function loadCharacterPage() {
     ?.addEventListener("click", () => openOtherArtEditor(id, true));
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// REF SHEET CAROUSEL
+// ══════════════════════════════════════════════════════════════════════
+
+let _refSheets = [];
+let _refIdx = 0;
+let _refWired = false;
+
+function getRefSheets(character) {
+  const sheets = [];
+  if (character.refImage) sheets.push({ src: character.refImage, label: "" });
+  (character.refImages || []).forEach(r => { if (r && r.src) sheets.push({ src: r.src, label: r.label || "" }); });
+  return sheets;
+}
+
+function showRefSheet(idx) {
+  const wrap = document.querySelector(".char-ref-wrap");
+  const img  = document.querySelector(".char-ref");
+  if (!wrap || !img || !_refSheets.length) return;
+  const n = _refSheets.length;
+  _refIdx = ((idx % n) + n) % n;
+  const sheet = _refSheets[_refIdx];
+  img.src = sheet.src;
+  img.alt = sheet.label || `Character reference sheet ${_refIdx + 1}`;
+  const label = wrap.querySelector(".ref-caption-label");
+  if (label) label.textContent = (sheet.label ? sheet.label + " · " : "") + `${_refIdx + 1} / ${n}`;
+  wrap.querySelectorAll(".ref-dot").forEach((d, i) => d.classList.toggle("active", i === _refIdx));
+}
+
+function renderRefCarousel(character) {
+  const wrap = document.querySelector(".char-ref-wrap");
+  const img  = document.querySelector(".char-ref");
+  if (!wrap || !img) return;
+
+  _refSheets = getRefSheets(character);
+  if (!_refSheets.length) { wrap.style.display = "none"; return; }
+
+  if (!wrap.querySelector(".ref-nav-prev")) {
+    wrap.insertAdjacentHTML("beforeend", `
+      <button type="button" class="ref-nav-btn ref-nav-prev" aria-label="Previous reference sheet">‹</button>
+      <button type="button" class="ref-nav-btn ref-nav-next" aria-label="Next reference sheet">›</button>
+      <div class="ref-caption"><span class="ref-caption-label"></span><span class="ref-dots"></span></div>`);
+    wrap.querySelector(".ref-nav-prev").addEventListener("click", () => showRefSheet(_refIdx - 1));
+    wrap.querySelector(".ref-nav-next").addEventListener("click", () => showRefSheet(_refIdx + 1));
+  }
+
+  const dots = wrap.querySelector(".ref-dots");
+  dots.innerHTML = _refSheets.map((_, i) =>
+    `<button type="button" class="ref-dot" data-i="${i}" aria-label="Show reference sheet ${i + 1}"></button>`).join("");
+  dots.querySelectorAll(".ref-dot").forEach(d =>
+    d.addEventListener("click", () => showRefSheet(parseInt(d.dataset.i, 10))));
+
+  wrap.classList.toggle("has-multiple", _refSheets.length > 1);
+  wrap.style.display = "block";
+  showRefSheet(Math.min(_refIdx, _refSheets.length - 1));
+
+  if (_refWired) return;
+  _refWired = true;
+
+  // Swipe on touch devices
+  let startX = null;
+  wrap.addEventListener("touchstart", e => { startX = e.touches[0].clientX; }, { passive: true });
+  wrap.addEventListener("touchend", e => {
+    if (startX === null || _refSheets.length < 2) return;
+    const dx = e.changedTouches[0].clientX - startX;
+    startX = null;
+    if (Math.abs(dx) > 40) showRefSheet(_refIdx + (dx < 0 ? 1 : -1));
+  }, { passive: true });
+
+  // Arrow keys (not while typing or with a modal open)
+  document.addEventListener("keydown", e => {
+    if (_refSheets.length < 2 || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
+    const t = e.target;
+    if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return;
+    if (document.querySelector(".editor-overlay.open")) return;
+    showRefSheet(_refIdx + (e.key === "ArrowRight" ? 1 : -1));
+  });
+}
+
 function pageCharId() {
   return new URLSearchParams(window.location.search).get("id");
 }
@@ -271,6 +343,8 @@ function renderAllLinks(links, customLinks) {
     { href: links.unvale,       label: "Unvale" },
     { href: links.characterhub, label: "CharacterHub" },
     { href: links.artfight,     label: "Artfight" },
+    { href: links.artattack,    label: "Art Attack" },
+    { href: links.toyhouse,     label: "Toyhou.se" },
     { href: links.spotify,      label: "Playlist" },
   ];
   fixed.forEach(({ href, label }) => {
@@ -1970,7 +2044,7 @@ function openEditor(id) {
     "name","fandom","pronouns","age","birthday",
     "heritage","occupation","refImage","titleImage","appearance","overview",
     "background",
-    "links.unvale","links.characterhub","links.artfight","links.spotify"
+    "links.unvale","links.characterhub","links.artfight","links.artattack","links.toyhouse","links.spotify"
   ];
   fields.forEach(key => {
     const el = document.getElementById("ef-" + key.replace(".", "_"));
@@ -1988,6 +2062,11 @@ function openEditor(id) {
   if (galleryBody) {
     galleryBody.innerHTML = "";
     (c?.gallery || []).forEach(item => addGalleryRow(item));
+  }
+  const refExtraBody = document.getElementById("ref-extra-rows");
+  if (refExtraBody) {
+    refExtraBody.innerHTML = "";
+    (c?.refImages || []).forEach(r => addRefExtraRow(r));
   }
   const customLinkBody = document.getElementById("custom-link-rows");
   if (customLinkBody) {
@@ -2021,6 +2100,20 @@ function addGalleryRow(item) {
     <td><input type="text" class="g-caption"    placeholder="Caption"            value="${escHtml(item.caption    || "")}" /></td>
     <td><input type="text" class="g-characters" placeholder="Names, comma-sep."  value="${escHtml(item.characters || "")}" /></td>
     <td><input type="text" class="g-year"       placeholder="Year" style="width:70px" value="${escHtml(item.year || "")}" /></td>
+    <td><button type="button" class="rm-gallery-row">✕</button></td>
+  `;
+  tr.querySelector(".rm-gallery-row").addEventListener("click", () => tr.remove());
+  tbody.appendChild(tr);
+}
+
+function addRefExtraRow(item) {
+  item = item || {};
+  const tbody = document.getElementById("ref-extra-rows");
+  if (!tbody) return;
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td><input type="url"  class="rx-src"   placeholder="https://…" value="${escHtml(item.src   || "")}" /></td>
+    <td><input type="text" class="rx-label" placeholder="e.g. Outfit 2, Casual" value="${escHtml(item.label || "")}" /></td>
     <td><button type="button" class="rm-gallery-row">✕</button></td>
   `;
   tr.querySelector(".rm-gallery-row").addEventListener("click", () => tr.remove());
@@ -2077,6 +2170,14 @@ async function handleFormSubmit(e) {
       url:   (tr.querySelector(".cl-url")?.value   || "").trim(),
     })).filter(l => l.url);
 
+    const refExtraBody = document.getElementById("ref-extra-rows");
+    const refImages = refExtraBody
+      ? Array.from(refExtraBody.querySelectorAll("tr")).map(tr => ({
+          src:   (tr.querySelector(".rx-src")?.value   || "").trim(),
+          label: (tr.querySelector(".rx-label")?.value || "").trim(),
+        })).filter(r => r.src)
+      : (existingChar?.refImages || []);
+
     const now = new Date().toISOString();
     const character = {
       // Start from the saved character so anything the editor doesn't show
@@ -2094,6 +2195,7 @@ async function handleFormSubmit(e) {
       occupation:    valField("ef-occupation"),
       titleImage:    valField("ef-titleImage"),
       refImage:      valField("ef-refImage"),
+      refImages,
       appearance:    valField("ef-appearance"),
       overview:      valField("ef-overview"),
       background:    valField("ef-background"),
@@ -2106,6 +2208,8 @@ async function handleFormSubmit(e) {
         unvale:       valField("ef-links_unvale"),
         characterhub: valField("ef-links_characterhub"),
         artfight:     valField("ef-links_artfight"),
+        artattack:    valField("ef-links_artattack"),
+        toyhouse:     valField("ef-links_toyhouse"),
         spotify:      valField("ef-links_spotify"),
       },
       customLinks,
@@ -2385,6 +2489,7 @@ document.addEventListener("DOMContentLoaded", function () {
   document.getElementById("char-editor-form")?.addEventListener("submit", handleFormSubmit);
   document.getElementById("add-gallery-row")?.addEventListener("click", () => addGalleryRow());
   document.getElementById("add-custom-link-row")?.addEventListener("click", () => addCustomLinkRow());
+  document.getElementById("add-ref-extra-row")?.addEventListener("click", () => addRefExtraRow());
 
   // ── Delete button in editor footer ──
   document.getElementById("editor-delete-btn")?.addEventListener("click", () => {
