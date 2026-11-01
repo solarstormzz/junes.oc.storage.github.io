@@ -74,8 +74,14 @@ async function loadFromGist() {
 }
 
 async function saveCharacters(list) {
-  localStorage.setItem(STORAGE_LOCAL, JSON.stringify(list));
-  if (!isConnected()) return true;
+  let localOk = true;
+  try {
+    localStorage.setItem(STORAGE_LOCAL, JSON.stringify(list));
+  } catch (err) {
+    localOk = false;
+    console.error("localStorage save error:", err);
+  }
+  if (!isConnected()) return localOk;
   setStatus("syncing");
   try {
     await gistPut(list);
@@ -250,6 +256,14 @@ function loadCharacterPage() {
     ?.addEventListener("click", () => openOtherArtEditor(id));
   document.getElementById("otherart-add-btn")
     ?.addEventListener("click", () => openOtherArtEditor(id, true));
+
+  // Arrived from "Make full profile" — open the full editor straight away
+  if (new URLSearchParams(window.location.search).get("edit") === "1") {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("edit");
+    window.history.replaceState({}, "", url.toString());
+    openCharPageEditor(id);
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -326,7 +340,7 @@ function renderRefCarousel(character) {
     if (_refSheets.length < 2 || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
     const t = e.target;
     if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return;
-    if (document.querySelector(".editor-overlay.open")) return;
+    if (document.querySelector(".editor-overlay.open, .lightbox.open")) return;
     showRefSheet(_refIdx + (e.key === "ArrowRight" ? 1 : -1));
   });
 }
@@ -473,7 +487,7 @@ function renderDetails(details, character, charId) {
   }
 
   const html = `<div class="details-grid">${filled.map(d => `
-    <div class="details-field${isWideDetail(d.value) ? " details-field--wide" : ""}">
+    <div class="details-field">
       <span class="details-label">${escHtml(d.label || d.key || "")}</span>
       <span class="details-value char-formatted">${escHtml(d.value || "")}</span>
     </div>`).join("")}</div>`;
@@ -590,16 +604,11 @@ function addDetailsRow(field) {
 
   const row = document.createElement("div");
   row.className = "details-editor-row";
-  row.style.cssText = "display:grid;grid-template-columns:20px 160px 1fr 28px;gap:0.3rem;align-items:start;padding:0.45rem 0.9rem;border-bottom:1px solid var(--border);";
   row.innerHTML = `
-    <span class="det-drag-handle" title="Drag to reorder"
-      style="cursor:grab;color:var(--ink-light);font-size:1rem;line-height:1;padding-top:6px;user-select:none;touch-action:none;">⠿</span>
-    <input type="text"  class="det-label" placeholder="Field name"  value="${escHtml(field.label || "")}"
-      style="font-family:'DM Sans',sans-serif;font-size:0.8rem;padding:0.3rem 0.5rem;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--ink);width:100%;box-sizing:border-box;outline:none;" />
-    <textarea class="det-value" rows="2" placeholder="Value…"
-      style="font-family:'DM Sans',sans-serif;font-size:0.8rem;padding:0.3rem 0.5rem;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--ink);width:100%;box-sizing:border-box;resize:vertical;outline:none;min-height:42px;">${escHtml(field.value || "")}</textarea>
-    <button type="button" class="rm-details-row" title="Remove"
-      style="background:none;border:none;color:var(--ink-light);cursor:pointer;font-size:0.85rem;padding:0.25rem 0.3rem;border-radius:3px;transition:color 0.15s;margin-top:2px;">✕</button>
+    <span class="det-drag-handle" title="Drag to reorder">⠿</span>
+    <input type="text" class="det-label" placeholder="Field name" value="${escHtml(field.label || "")}" />
+    <textarea class="det-value" rows="2" placeholder="Value…">${escHtml(field.value || "")}</textarea>
+    <button type="button" class="rm-details-row" title="Remove">✕</button>
     <input type="hidden" class="det-key" value="${escHtml(field.key || "")}" />
   `;
 
@@ -622,8 +631,6 @@ function addDetailsRow(field) {
     row.remove();
     _markDetailsDirty();
   });
-  row.querySelector(".rm-details-row").addEventListener("mouseover", function() { this.style.color = "#a05050"; });
-  row.querySelector(".rm-details-row").addEventListener("mouseout",  function() { this.style.color = ""; });
   tbody.appendChild(row);
 }
 
@@ -853,7 +860,7 @@ function showTreeDefaultSidebar(charId) {
       (c.name || "").toLowerCase().trim() === name.toLowerCase().trim()
     );
     const img  = otherChar ? (otherChar.titleImage || otherChar.refImage || "") : "";
-    const href = otherChar ? `character.html?id=${escHtml(otherChar.id)}` : "";
+    const href = otherChar && !otherChar.mini ? `character.html?id=${escHtml(otherChar.id)}` : "";
 
     const avatarHtml = img
       ? `<img src="${escHtml(img)}" class="tree-sb-avatar" alt="" />`
@@ -861,7 +868,10 @@ function showTreeDefaultSidebar(charId) {
 
     const nameHtml = href
       ? `<a href="${escHtml(href)}" class="tree-sb-name tree-sb-name-link">${escHtml(name)}</a>`
-      : `<span class="tree-sb-name">${escHtml(name)}</span>`;
+      : `<a href="#" class="tree-sb-name tree-sb-name-link" data-person="${escHtml(name)}">${escHtml(name)}</a>`;
+    const avatarLink = href
+      ? `<a href="${href}" class="rel-avatar-link">${avatarHtml}</a>`
+      : `<a href="#" class="rel-avatar-link" data-person="${escHtml(name)}">${avatarHtml}</a>`;
 
     const roleClass = {
       Parent:      "tree-sb-role--parent",
@@ -875,7 +885,7 @@ function showTreeDefaultSidebar(charId) {
 
     return `
       <div class="tree-sb-member">
-        ${avatarHtml}
+        ${avatarLink}
         <div class="tree-sb-member-info">
           <div class="tree-sb-name-row">${nameHtml}</div>
           <div class="tree-sb-meta-row">
@@ -894,6 +904,8 @@ function showTreeDefaultSidebar(charId) {
       <p class="tree-sb-title">Family Tree</p>
       <div class="tree-sb-members">${rows}</div>
     </div>`;
+
+  wirePersonLinks(wrap, charId);
 
   wrap.querySelectorAll(".tree-sb-add-rel").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -1177,7 +1189,7 @@ function redrawTree(charId) {
       c.id !== charId &&
       (c.name||"").toLowerCase().trim() === (name||"").toLowerCase().trim()
     );
-    return m ? `character.html?id=${m.id}` : "";
+    return m && !m.mini ? `character.html?id=${m.id}` : "";
   }
 
   function drawNode(name, x, y, isFocal) {
@@ -1199,9 +1211,10 @@ function redrawTree(charId) {
            fill="var(--ink-light)">${escHtml(init)}</text>`;
 
     const ring     = isFocal ? `stroke="var(--ink)" stroke-width="2.5"` : `stroke="var(--border)" stroke-width="1.5"`;
-    const cursor   = _treeEditMode ? `style="cursor:pointer"` : (href ? `style="cursor:pointer"` : "");
+    const cursor   = _treeEditMode ? `style="cursor:pointer"` : ((href || !isFocal) ? `style="cursor:pointer"` : "");
     const dataEdit = _treeEditMode ? `data-editnode="${escHtml(name)}"` : "";
     const dataHref = (!_treeEditMode && href) ? `data-href="${escHtml(href)}"` : "";
+    const dataPerson = (!_treeEditMode && !href && !isFocal) ? `data-person="${escHtml(name)}"` : "";
 
     const badge = _treeEditMode ? `
       <circle cx="${x+r-4}" cy="${y-r+4}" r="10" fill="var(--card)" stroke="var(--border)" stroke-width="1"/>
@@ -1218,7 +1231,7 @@ function redrawTree(charId) {
         fill="${isFocal ? 'var(--ink)' : 'var(--ink-mid)'}">${tspans}</text>`;
 
     return `
-      <g class="tree-node" ${cursor} ${dataEdit} ${dataHref}>
+      <g class="tree-node" ${cursor} ${dataEdit} ${dataHref} ${dataPerson}>
         <circle cx="${x}" cy="${y}" r="${r}" fill="var(--card)" ${ring}/>
         ${imgEl}
         ${badge}
@@ -1378,6 +1391,7 @@ function redrawTree(charId) {
   svg.querySelectorAll("[data-href]").forEach(el => {
     el.addEventListener("click", () => window.location.href = el.getAttribute("data-href"));
   });
+  wirePersonLinks(svg, charId);
 
   if (_treeEditMode) {
     svg.querySelectorAll("[data-editnode]").forEach(el => {
@@ -1458,11 +1472,13 @@ function renderRelationships(relationships, currentId) {
       c.id !== currentId &&
       (c.name || "").toLowerCase().trim() === (rel.name || "").toLowerCase().trim()
     );
-    const nameHtml = match
-      ? `<a href="character.html?id=${escHtml(match.id)}" class="rel-name rel-name-link">${escHtml(rel.name || "Unknown")}</a>`
-      : rel.link
-        ? `<a href="${escHtml(rel.link)}" class="rel-name rel-name-link" target="_blank" rel="noopener">${escHtml(rel.name || "Unknown")}</a>`
-        : `<span class="rel-name">${escHtml(rel.name || "Unknown")}</span>`;
+    // A full profile links to its page; anyone else (mini profile or not on the site yet) opens a mini profile popup.
+    const full = match && !match.mini ? match : null;
+    const pName = escHtml(rel.name || "Unknown");
+    const nameHtml = (full
+      ? `<a href="character.html?id=${escHtml(full.id)}" class="rel-name rel-name-link">${pName}</a>`
+      : `<a href="#" class="rel-name rel-name-link" data-person="${escHtml(rel.name || "")}">${pName}</a>`)
+      + (!full && rel.link ? `<a href="${escHtml(rel.link)}" class="rel-ext-link" target="_blank" rel="noopener" title="Open link">↗</a>` : "");
     const canonLabel = rel.canon === "canon"
       ? `<span class="rel-canon rel-canon--yes">canon</span>`
       : rel.canon === "noncanon"
@@ -1487,9 +1503,12 @@ function renderRelationships(relationships, currentId) {
           --> <span class="ex-collapse"><span class="expandable-link" data-action="collapse">collapse</span></span>
         </div>`;
     }
-    const avatarHtml = match && (match.titleImage || match.refImage)
+    const avatarImg = match && (match.titleImage || match.refImage)
       ? `<img src="${escHtml(match.titleImage || match.refImage)}" class="rel-avatar" alt="" />`
       : `<div class="rel-avatar rel-avatar-placeholder">${escHtml((rel.name?.[0] || "?").toUpperCase())}</div>`;
+    const avatarHtml = full
+      ? `<a href="character.html?id=${escHtml(full.id)}" class="rel-avatar-link">${avatarImg}</a>`
+      : `<a href="#" class="rel-avatar-link" data-person="${escHtml(rel.name || "")}">${avatarImg}</a>`;
     return `
       <div class="rel-card">
         <div class="rel-card-header">
@@ -1505,6 +1524,7 @@ function renderRelationships(relationships, currentId) {
 
   panel.innerHTML = `<div class="rel-grid">${cards}</div>`;
   panel.querySelectorAll(".ex-block").forEach(block => wireExpandable(block));
+  wirePersonLinks(panel, currentId);
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -1570,24 +1590,37 @@ function addRelRow(rel) {
 
 async function handleRelFormSubmit(e) {
   e.preventDefault();
-  if (!relEditingCharId) return;
+  const charId = relEditingCharId;
+  if (!charId) return;
   const rows = Array.from(document.querySelectorAll("#rel-editor-rows .rel-editor-row"));
-  const relationships = rows.map(tr => ({
+  const all = rows.map(tr => ({
     name:        (tr.querySelector(".rel-r-name")?.value  || "").trim(),
     type:        (tr.querySelector(".rel-r-type")?.value  || "").trim(),
     canon:       (tr.querySelector(".rel-r-canon")?.value || ""),
     link:        (tr.querySelector(".rel-r-link")?.value  || "").trim(),
     description: (tr.querySelector(".rel-r-desc")?.value  || "").trim(),
-  })).filter(r => r.name);
-  const characters = getCharacters();
-  const idx = characters.findIndex(c => c.id === relEditingCharId);
-  if (idx !== -1) {
-    characters[idx].relationships = relationships;
-    characters[idx].updatedAt = new Date().toISOString();
+  }));
+  // Don't silently throw away rows that have content but no name
+  if (all.some(r => !r.name && (r.type || r.link || r.description))) {
+    alert("Every relationship needs a name — fill in the Name column (or remove the row) before saving.");
+    return;
   }
+  const relationships = all.filter(r => r.name);
+  const characters = getCharacters();
+  const idx = characters.findIndex(c => c.id === charId);
+  if (idx === -1) {
+    alert("Couldn't find this character in storage. Try reloading the page.");
+    return;
+  }
+  characters[idx].relationships = relationships;
+  characters[idx].updatedAt = new Date().toISOString();
+  // Persist first (saveCharacters writes localStorage synchronously), then touch the UI,
+  // so a rendering problem can never stop the data being saved.
+  const saving = saveCharacters(characters);
   closeRelationshipEditor();
-  renderRelationships(relationships, relEditingCharId);
-  await saveCharacters(characters);
+  try { renderRelationships(relationships, charId); } catch (err) { console.error(err); }
+  const ok = await saving;
+  if (!ok) alert("The relationships couldn't be saved. Check the sync icon / your connection and try again.");
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -1764,24 +1797,132 @@ function renderGallery(ownGallery, currentCharId) {
   });
   const combined = [...ownGallery, ...taggedImages];
   combined.sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0));
-  if (!combined.length) {
-    grid.innerHTML = "<p style='padding:1rem;opacity:.5;font-style:italic'>No gallery images yet.</p>";
-    return;
-  }
-  grid.innerHTML = combined.map(item => `
-    <div class="gallery-item">
-      <div class="gallery-img-wrap">
-        <img src="${escHtml(item.src)}" alt="${escHtml(item.caption || '')}" loading="lazy" />
-      </div>
+  renderMasonry(grid, combined, "No gallery images yet.", item => `
       <div class="gallery-meta">
         <span class="gallery-caption">${escHtml(item.caption || "")}</span>
         <div class="gallery-meta-right">
           ${item._fromChar ? `<span class="gallery-shared-tag" title="Uploaded to ${escHtml(item._fromChar)}'s gallery">w/ ${escHtml(item._fromChar)}</span>` : ""}
           ${item.year ? `<span class="gallery-year">${escHtml(item.year)}</span>` : ""}
         </div>
-      </div>
-    </div>
-  `).join("");
+      </div>`);
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// MASONRY + LIGHTBOX
+// ══════════════════════════════════════════════════════════════════════
+
+// Items are spread over flex columns (shortest column first) instead of CSS multi-column,
+// which flickered on hover and split item frames/shadows across columns.
+function renderMasonry(grid, items, emptyMsg, metaFn) {
+  grid._items = items;
+  if (!items.length) {
+    grid._nodes = null;
+    grid.innerHTML = `<p style='padding:1rem;opacity:.5;font-style:italic'>${emptyMsg}</p>`;
+    return;
+  }
+  grid._nodes = items.map((item, i) => {
+    const el = document.createElement("div");
+    el.className = "gallery-item";
+    el.innerHTML = `
+      <div class="gallery-img-wrap"><img src="${escHtml(item.src)}" alt="${escHtml(item.caption || "")}" /></div>
+      ${metaFn(item)}`;
+    el.querySelector(".gallery-img-wrap").addEventListener("click", () => openLightbox(grid._items, i));
+    el.querySelector("img").addEventListener("load", () => scheduleMasonry(grid));
+    return el;
+  });
+  layoutMasonry(grid);
+}
+
+function layoutMasonry(grid) {
+  const nodes = grid._nodes;
+  if (!nodes) return;
+  const gap = 20;
+  const w = grid.clientWidth || 800;
+  const n = w < 520 ? 1 : Math.max(1, Math.min(3, Math.floor((w + gap) / (260 + gap))));
+  const cols = [];
+  const heights = [];
+  grid.innerHTML = "";
+  for (let i = 0; i < n; i++) {
+    const c = document.createElement("div");
+    c.className = "gallery-col";
+    grid.appendChild(c);
+    cols.push(c);
+    heights.push(0);
+  }
+  nodes.forEach(node => {
+    let k = 0;
+    for (let i = 1; i < n; i++) if (heights[i] < heights[k] - 1) k = i;
+    cols[k].appendChild(node);
+    heights[k] += node.offsetHeight + gap;
+  });
+}
+
+function scheduleMasonry(grid) {
+  clearTimeout(grid._mTimer);
+  grid._mTimer = setTimeout(() => layoutMasonry(grid), 120);
+}
+
+let _lbEl = null, _lbItems = [], _lbIdx = 0;
+
+function ensureLightbox() {
+  if (_lbEl) return _lbEl;
+  const el = document.createElement("div");
+  el.className = "lightbox";
+  el.innerHTML = `
+    <button type="button" class="lightbox-btn lightbox-close" aria-label="Close">✕</button>
+    <button type="button" class="lightbox-btn lightbox-prev" aria-label="Previous">‹</button>
+    <button type="button" class="lightbox-btn lightbox-next" aria-label="Next">›</button>
+    <figure class="lightbox-figure">
+      <img class="lightbox-img" alt="" />
+      <figcaption class="lightbox-caption"></figcaption>
+    </figure>`;
+  document.body.appendChild(el);
+  el.addEventListener("click", e => {
+    const t = e.target;
+    if (t === el || t.classList.contains("lightbox-figure") || t.classList.contains("lightbox-img")) closeLightbox();
+  });
+  el.querySelector(".lightbox-close").addEventListener("click", closeLightbox);
+  el.querySelector(".lightbox-prev").addEventListener("click", () => showLightbox(_lbIdx - 1));
+  el.querySelector(".lightbox-next").addEventListener("click", () => showLightbox(_lbIdx + 1));
+  document.addEventListener("keydown", e => {
+    if (!el.classList.contains("open")) return;
+    if (e.key === "Escape") closeLightbox();
+    else if (e.key === "ArrowLeft")  showLightbox(_lbIdx - 1);
+    else if (e.key === "ArrowRight") showLightbox(_lbIdx + 1);
+  });
+  _lbEl = el;
+  return el;
+}
+
+function showLightbox(idx) {
+  const n = _lbItems.length;
+  if (!n) return;
+  _lbIdx = ((idx % n) + n) % n;
+  const item = _lbItems[_lbIdx];
+  const el = ensureLightbox();
+  const img = el.querySelector(".lightbox-img");
+  img.src = item.src;
+  img.alt = item.caption || "";
+  const bits = [];
+  if (item.caption) bits.push(escHtml(item.caption));
+  if (item.artist)  bits.push("Art by " + escHtml(item.artist));
+  if (item._fromChar) bits.push("w/ " + escHtml(item._fromChar));
+  if (item.year)    bits.push(escHtml(item.year));
+  el.querySelector(".lightbox-caption").innerHTML = bits.join(" · ");
+  el.classList.toggle("single", n < 2);
+}
+
+function openLightbox(items, idx) {
+  _lbItems = items || [];
+  const el = ensureLightbox();
+  showLightbox(idx);
+  el.classList.add("open");
+  document.body.style.overflow = "hidden";
+}
+
+function closeLightbox() {
+  _lbEl?.classList.remove("open");
+  document.body.style.overflow = "";
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -1792,15 +1933,7 @@ function renderOtherArt(items) {
   const grid = document.getElementById("otherart-grid");
   if (!grid) return;
   const sorted = [...(items || [])].sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0));
-  if (!sorted.length) {
-    grid.innerHTML = "<p style='padding:1rem;opacity:.5;font-style:italic'>No art by others yet.</p>";
-    return;
-  }
-  grid.innerHTML = sorted.map(item => `
-    <div class="gallery-item">
-      <div class="gallery-img-wrap">
-        <img src="${escHtml(item.src)}" alt="${escHtml(item.caption || '')}" loading="lazy" />
-      </div>
+  renderMasonry(grid, sorted, "No art by others yet.", item => `
       <div class="gallery-meta">
         <div>
           <span class="gallery-caption">${escHtml(item.caption || "")}</span>
@@ -1809,9 +1942,7 @@ function renderOtherArt(items) {
         <div class="gallery-meta-right">
           ${item.year ? `<span class="gallery-year">${escHtml(item.year)}</span>` : ""}
         </div>
-      </div>
-    </div>
-  `).join("");
+      </div>`);
 }
 
 let _otherArtEditingCharId = null;
@@ -1938,7 +2069,7 @@ async function loadIndexPage() {
 
 function renderIndexSections(container, filter) {
   filter = filter || "";
-  let characters = getCharacters();
+  let characters = getCharacters().filter(c => !c.mini);
   const totalBadge = document.getElementById("total-char-count");
   if (totalBadge) {
     const n = characters.length;
@@ -2473,10 +2604,238 @@ async function deleteStory(charId, storyId) {
 }
 
 // ══════════════════════════════════════════════════════════════════════
+// MINI PROFILES
+// A mini profile is a lightweight character (flag: mini = true). It is hidden from
+// the index, shows up in relationships / the family tree, and can be promoted to a
+// full profile at any time.
+// ══════════════════════════════════════════════════════════════════════
+
+let _mini = null; // { id, fromId, name }
+
+function wirePersonLinks(root, fromCharId) {
+  root.querySelectorAll("[data-person]").forEach(el => {
+    el.addEventListener("click", e => {
+      e.preventDefault();
+      e.stopPropagation();
+      openPersonByName(el.getAttribute("data-person"), fromCharId);
+    });
+  });
+}
+
+function openPersonByName(name, fromCharId) {
+  const key = (name || "").toLowerCase().trim();
+  if (!key) return;
+  const match = getCharacters().find(c =>
+    c.id !== fromCharId && (c.name || "").toLowerCase().trim() === key);
+  if (match && !match.mini) {
+    window.location.href = `character.html?id=${encodeURIComponent(match.id)}`;
+    return;
+  }
+  openMiniProfile(match ? match.id : null, name, fromCharId);
+}
+
+function ensureMiniModal() {
+  let ov = document.getElementById("mini-overlay");
+  if (ov) return ov;
+  ov = document.createElement("div");
+  ov.id = "mini-overlay";
+  ov.className = "editor-overlay";
+  ov.innerHTML = `
+    <div class="editor-modal mini-modal">
+      <div class="editor-modal-header">
+        <h2 class="editor-modal-title" id="mini-title">Mini Profile</h2>
+        <button type="button" id="mini-close" class="editor-close" aria-label="Close">✕</button>
+      </div>
+      <div id="mini-view" class="mini-view"></div>
+      <form id="mini-form" class="editor-form mini-form" style="display:none">
+        <div class="editor-row">
+          <label>Name
+            <input type="text" id="mf-name" readonly />
+            <span class="editor-field-hint">Fixed so it stays linked to the tree and relationships.</span>
+          </label>
+        </div>
+        <div class="editor-row">
+          <label>Picture URL <input type="url" id="mf-pic" placeholder="https://…" /></label>
+        </div>
+        <div class="editor-row">
+          <label>Nickname <input type="text" id="mf-nick" /></label>
+          <label>Occupation <input type="text" id="mf-occ" /></label>
+        </div>
+        <div class="editor-row">
+          <label>Age <input type="text" id="mf-age" /></label>
+          <label>Birthday <input type="text" id="mf-bday" placeholder="Month Day" /></label>
+        </div>
+        <label class="editor-label-full">Note
+          <textarea id="mf-note" rows="4" maxlength="600" placeholder="A few words about them…"></textarea>
+        </label>
+        <div class="editor-actions">
+          <div class="editor-delete-zone">
+            <button type="button" id="mf-delete" class="editor-btn-delete">Delete</button>
+          </div>
+          <button type="button" id="mf-cancel" class="editor-btn-cancel">Cancel</button>
+          <button type="submit" class="editor-btn-save">Save</button>
+        </div>
+      </form>
+    </div>`;
+  document.body.appendChild(ov);
+
+  ov.addEventListener("click", e => { if (e.target === ov) closeMiniProfile(); });
+  ov.querySelector("#mini-close").addEventListener("click", closeMiniProfile);
+  ov.querySelector("#mini-form").addEventListener("submit", saveMiniProfile);
+  ov.querySelector("#mf-delete").addEventListener("click", deleteMiniProfile);
+  ov.querySelector("#mf-cancel").addEventListener("click", () => {
+    const c = _mini?.id ? getCharacters().find(x => x.id === _mini.id) : null;
+    if (c) showMiniView(c); else closeMiniProfile();
+  });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && ov.classList.contains("open")) closeMiniProfile();
+  });
+  return ov;
+}
+
+function openMiniProfile(id, name, fromId) {
+  const ov = ensureMiniModal();
+  const c = id ? getCharacters().find(x => x.id === id) : null;
+  _mini = { id: c ? c.id : null, fromId, name: c ? c.name : name };
+  if (c) showMiniView(c); else showMiniForm(null);
+  ov.classList.add("open");
+  document.body.style.overflow = "hidden";
+}
+
+function closeMiniProfile() {
+  document.getElementById("mini-overlay")?.classList.remove("open");
+  document.body.style.overflow = "";
+  _mini = null;
+}
+
+function showMiniView(c) {
+  document.getElementById("mini-form").style.display = "none";
+  const view = document.getElementById("mini-view");
+  view.style.display = "";
+  document.getElementById("mini-title").textContent = "Mini Profile";
+  const img = c.titleImage || c.refImage;
+  const avatar = img
+    ? `<img class="mini-avatar" src="${escHtml(img)}" alt="" />`
+    : `<div class="mini-avatar mini-avatar-placeholder">${escHtml((c.name?.[0] || "?").toUpperCase())}</div>`;
+  const rows = [["Age", c.age], ["Birthday", c.birthday], ["Occupation", c.occupation]].filter(r => r[1]);
+  view.innerHTML = `
+    <div class="mini-head">
+      ${avatar}
+      <div class="mini-head-text">
+        <h3 class="mini-name">${escHtml(c.name || "Unnamed")}</h3>
+        ${c.nicknames ? `<p class="mini-nick">aka ${escHtml(c.nicknames)}</p>` : ""}
+      </div>
+    </div>
+    ${rows.length ? `<table class="char-table mini-table">${rows.map(r =>
+      `<tr><td>${r[0]}</td><td>${escHtml(r[1])}</td></tr>`).join("")}</table>` : ""}
+    ${c.overview ? `<p class="char-body char-formatted mini-note">${escHtml(c.overview)}</p>` : ""}
+    <div class="mini-actions">
+      <button type="button" id="mini-edit" class="rel-edit-trigger">Edit</button>
+      <button type="button" id="mini-promote" class="editor-btn-save mini-promote">Make full profile</button>
+    </div>
+    <p class="mini-hint">This is a mini profile. It isn't listed on the main index until you make it a full profile.</p>`;
+  view.querySelector("#mini-edit").addEventListener("click", () => showMiniForm(c));
+  view.querySelector("#mini-promote").addEventListener("click", promoteMiniProfile);
+}
+
+function showMiniForm(c) {
+  document.getElementById("mini-view").style.display = "none";
+  document.getElementById("mini-form").style.display = "";
+  document.getElementById("mini-title").textContent = c ? "Edit Mini Profile" : "New Mini Profile";
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ""; };
+  set("mf-name",  c ? c.name : _mini?.name);
+  set("mf-pic",   c?.titleImage || c?.refImage);
+  set("mf-nick",  c?.nicknames);
+  set("mf-occ",   c?.occupation);
+  set("mf-age",   c?.age);
+  set("mf-bday",  c?.birthday);
+  set("mf-note",  c?.overview);
+  document.getElementById("mf-delete").style.display = c ? "" : "none";
+}
+
+function refreshPersonViews() {
+  const id = pageCharId();
+  const page = id ? getCharacters().find(c => c.id === id) : null;
+  if (!page) return;
+  if (document.getElementById("panel-relationships")) renderRelationships(page.relationships || [], id);
+  if (document.getElementById("tree-svg")) {
+    if (!_treeEditMode) showTreeDefaultSidebar(id);
+    redrawTree(id);
+  }
+}
+
+async function saveMiniProfile(e) {
+  e.preventDefault();
+  if (!_mini) return;
+  const val = id => (document.getElementById(id)?.value || "").trim();
+  const name = val("mf-name");
+  if (!name) { alert("This mini profile needs a name."); return; }
+
+  const chars = getCharacters();
+  const now = new Date().toISOString();
+  let c = _mini.id ? chars.find(x => x.id === _mini.id) : null;
+  if (!c) {
+    const from = chars.find(x => x.id === _mini.fromId);
+    c = {
+      id: generateId(), mini: true, createdAt: now, name,
+      fandom: from?.fandom || "", pronouns: "", heritage: "", appearance: "",
+      background: "", history: "", refImage: "", refImages: [],
+      links: {}, customLinks: [], gallery: [], otherArt: [],
+      relationships: [], treeData: {}, details: [], stories: [],
+    };
+    chars.push(c);
+  }
+  Object.assign(c, {
+    titleImage: val("mf-pic"),
+    nicknames:  val("mf-nick"),
+    occupation: val("mf-occ"),
+    age:        val("mf-age"),
+    birthday:   val("mf-bday"),
+    overview:   val("mf-note"),
+    updatedAt:  now,
+  });
+  _mini.id = c.id;
+
+  const saving = saveCharacters(chars);
+  showMiniView(c);
+  refreshPersonViews();
+  const ok = await saving;
+  if (!ok) alert("The mini profile couldn't be saved. Check the sync icon / your connection and try again.");
+}
+
+async function deleteMiniProfile() {
+  if (!_mini?.id) return;
+  if (!confirm("Delete this mini profile? Their name stays in the tree and relationships, but the profile details are lost.")) return;
+  const chars = getCharacters().filter(c => c.id !== _mini.id);
+  const saving = saveCharacters(chars);
+  closeMiniProfile();
+  refreshPersonViews();
+  const ok = await saving;
+  if (!ok) alert("Deleted here, but syncing to GitHub failed — it may reappear after a refresh.");
+}
+
+async function promoteMiniProfile() {
+  if (!_mini?.id) return;
+  const chars = getCharacters();
+  const c = chars.find(x => x.id === _mini.id);
+  if (!c) return;
+  delete c.mini;
+  c.updatedAt = new Date().toISOString();
+  const ok = await saveCharacters(chars);
+  if (!ok) alert("Saved on this device, but syncing to GitHub failed. Check the sync icon once the page loads.");
+  window.location.href = `character.html?id=${encodeURIComponent(c.id)}&edit=1`;
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════════════════════════════════
 
 document.addEventListener("DOMContentLoaded", function () {
+  let _rsT;
+  window.addEventListener("resize", () => {
+    clearTimeout(_rsT);
+    _rsT = setTimeout(() => document.querySelectorAll(".gallery-grid").forEach(layoutMasonry), 150);
+  });
   loadIndexPage();
   loadCharacterPage();
 
