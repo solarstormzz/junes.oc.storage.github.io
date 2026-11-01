@@ -971,6 +971,13 @@ footer {
   max-height: calc(100vh - 10rem);
 }
 
+/* The form is a height-capped flex column that scrolls. Children that clip their own
+   overflow (fieldsets, tables, the details sections) could otherwise shrink to nothing
+   instead of letting the form scroll. */
+.editor-form > * {
+  flex-shrink: 0;
+}
+
 .editor-fieldset {
   border: 1px solid var(--border);
   border-radius: 6px;

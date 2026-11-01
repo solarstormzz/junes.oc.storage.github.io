@@ -1560,6 +1560,7 @@ function addRelRow(rel) {
   if (!tbody) return;
   const tr = document.createElement("tr");
   tr.classList.add("rel-editor-row");
+  tr.dataset.origName = rel.name || "";
   tr.innerHTML = `
     <td class="rel-editor-cell rel-editor-cell--name">
       <input type="text" class="rel-r-name" placeholder="Name" value="${escHtml(rel.name || "")}" />
@@ -1612,6 +1613,16 @@ async function handleRelFormSubmit(e) {
     alert("Couldn't find this character in storage. Try reloading the page.");
     return;
   }
+  // Renamed someone who has no full profile (a mini profile, or just a name in the tree)?
+  // Carry the new name over to their mini profile, the family tree and everyone else's references.
+  rows.forEach((tr, i) => {
+    const oldName = tr.dataset.origName || "";
+    const newName = all[i].name;
+    if (!oldName || !newName || oldName === newName) return;
+    const wasFull = characters.some(c => !c.mini && normName(c.name) === normName(oldName));
+    const clash   = characters.some(c => normName(c.name) === normName(newName) && normName(c.name) !== normName(oldName));
+    if (!wasFull && !clash) renamePersonIn(characters, oldName, newName);
+  });
   characters[idx].relationships = relationships;
   characters[idx].updatedAt = new Date().toISOString();
   // Persist first (saveCharacters writes localStorage synchronously), then touch the UI,
@@ -1619,6 +1630,7 @@ async function handleRelFormSubmit(e) {
   const saving = saveCharacters(characters);
   closeRelationshipEditor();
   try { renderRelationships(relationships, charId); } catch (err) { console.error(err); }
+  try { if (document.getElementById("tree-svg")) { if (!_treeEditMode) showTreeDefaultSidebar(charId); redrawTree(charId); } } catch (err) { console.error(err); }
   const ok = await saving;
   if (!ok) alert("The relationships couldn't be saved. Check the sync icon / your connection and try again.");
 }
@@ -2603,6 +2615,49 @@ async function deleteStory(charId, storyId) {
   await saveCharacters(characters);
 }
 
+
+// ── Renaming a person everywhere ─────────────────────────────────────
+// People are linked by name (relationships, family trees, gallery/story tags), so when
+// a name changes we rewrite it in every character, and rename the mini profile itself.
+function normName(n) { return (n || "").toLowerCase().trim(); }
+
+function renameInCsv(csv, oldKey, newName) {
+  if (!csv) return csv;
+  return csv.split(",").map(t => normName(t) === oldKey ? newName : t.trim()).filter(Boolean).join(", ");
+}
+
+function renamePersonIn(chars, oldName, newName) {
+  const o = normName(oldName);
+  const n = (newName || "").trim();
+  if (!o || !n) return;
+  const map = x => (normName(x) === o ? n : x);
+  const uniq = arr => [...new Set(arr)];
+  chars.forEach(c => {
+    if (c.mini && normName(c.name) === o) c.name = n;
+    (c.relationships || []).forEach(r => { if (normName(r.name) === o) r.name = n; });
+    (c.gallery  || []).forEach(g => { g.characters = renameInCsv(g.characters, o, n); });
+    (c.stories  || []).forEach(st => { st.characters = renameInCsv(st.characters, o, n); });
+    if (c.treeData && typeof c.treeData === "object") {
+      const out = {};
+      Object.entries(c.treeData).forEach(([k, v]) => {
+        if (!v || typeof v !== "object" || Array.isArray(v)) return;
+        const nk = map(k);
+        const node = {
+          parents:  uniq((v.parents  || []).map(map)),
+          partners: uniq((v.partners || []).map(map)),
+          children: uniq((v.children || []).map(map)),
+        };
+        if (out[nk]) {
+          ["parents", "partners", "children"].forEach(r => { out[nk][r] = uniq([...out[nk][r], ...node[r]]); });
+        } else {
+          out[nk] = node;
+        }
+      });
+      c.treeData = out;
+    }
+  });
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // MINI PROFILES
 // A mini profile is a lightweight character (flag: mini = true). It is hidden from
@@ -2650,9 +2705,10 @@ function ensureMiniModal() {
       <form id="mini-form" class="editor-form mini-form" style="display:none">
         <div class="editor-row">
           <label>Name
-            <input type="text" id="mf-name" readonly />
-            <span class="editor-field-hint">Fixed so it stays linked to the tree and relationships.</span>
+            <input type="text" id="mf-name" />
+            <span class="editor-field-hint">Renaming updates the relationships and family trees too.</span>
           </label>
+          <label>Full name <input type="text" id="mf-full" placeholder="Full legal name" /></label>
         </div>
         <div class="editor-row">
           <label>Picture URL <input type="url" id="mf-pic" placeholder="https://…" /></label>
@@ -2717,7 +2773,8 @@ function showMiniView(c) {
   const avatar = img
     ? `<img class="mini-avatar" src="${escHtml(img)}" alt="" />`
     : `<div class="mini-avatar mini-avatar-placeholder">${escHtml((c.name?.[0] || "?").toUpperCase())}</div>`;
-  const rows = [["Age", c.age], ["Birthday", c.birthday], ["Occupation", c.occupation]].filter(r => r[1]);
+  const fullName = (c.details || []).find(d => d.key === "fullName")?.value || "";
+  const rows = [["Full name", fullName], ["Age", c.age], ["Birthday", c.birthday], ["Occupation", c.occupation]].filter(r => r[1]);
   view.innerHTML = `
     <div class="mini-head">
       ${avatar}
@@ -2744,6 +2801,7 @@ function showMiniForm(c) {
   document.getElementById("mini-title").textContent = c ? "Edit Mini Profile" : "New Mini Profile";
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ""; };
   set("mf-name",  c ? c.name : _mini?.name);
+  set("mf-full",  (c?.details || []).find(d => d.key === "fullName")?.value);
   set("mf-pic",   c?.titleImage || c?.refImage);
   set("mf-nick",  c?.nicknames);
   set("mf-occ",   c?.occupation);
@@ -2774,6 +2832,15 @@ async function saveMiniProfile(e) {
   const chars = getCharacters();
   const now = new Date().toISOString();
   let c = _mini.id ? chars.find(x => x.id === _mini.id) : null;
+
+  // Name changed? Make sure it doesn't collide, then rename it everywhere it's referenced.
+  const oldName = c ? c.name : _mini.name;
+  if (name !== oldName) {
+    const clash = chars.find(x => (!c || x.id !== c.id) && normName(x.name) === normName(name));
+    if (clash) { alert(`Someone called "${clash.name}" already exists — pick a different name.`); return; }
+    renamePersonIn(chars, oldName, name);
+    _mini.name = name;
+  }
   if (!c) {
     const from = chars.find(x => x.id === _mini.fromId);
     c = {
@@ -2794,6 +2861,10 @@ async function saveMiniProfile(e) {
     overview:   val("mf-note"),
     updatedAt:  now,
   });
+  // Full name lives in Details so it carries over when this becomes a full profile
+  const fullName = val("mf-full");
+  c.details = (c.details || []).filter(d => d.key !== "fullName");
+  if (fullName) c.details.unshift({ key: "fullName", label: "Full Legal Name", value: fullName });
   _mini.id = c.id;
 
   const saving = saveCharacters(chars);
