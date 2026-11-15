@@ -98,7 +98,7 @@
 /* ── Horizontal bars ── */
 .bar-row {
   display: grid;
-  grid-template-columns: minmax(70px, 34%) 1fr 2.2rem;
+  grid-template-columns: minmax(70px, 34%) 1fr 4.6rem;
   align-items: center;
   gap: 0.6rem;
   padding: 0.18rem 0;
@@ -171,3 +171,72 @@
   .stats-wrap { padding: 1.5rem 1rem 3rem; }
   .stat-grid { grid-template-columns: 1fr; }
 }
+
+/* ══════════════════════════════════════════
+   v2: expandable bars, % labels, legend, hover list
+══════════════════════════════════════════ */
+.bar-row { cursor: default; border-radius: 4px; }
+.bar-row:hover, .col-item[data-tip]:hover .col-bar { filter: brightness(0.93); }
+.bar-row:hover { background: var(--bg); }
+.bar-pct {
+  margin-left: 0.35rem;
+  font-weight: 400;
+  font-size: 0.68rem;
+  color: var(--ink-light);
+}
+.bar-chart:not(.expanded) .bar-extra { display: none; }
+
+.more-btn {
+  margin-top: 0.6rem;
+  padding: 0.25rem 0.7rem;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.72rem;
+  color: var(--ink-mid);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.more-btn:hover { color: var(--ink); border-color: #b5afa6; }
+
+.col-item[data-tip] { cursor: default; }
+
+.share-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 1.1rem;
+  font-size: 0.72rem;
+  color: var(--ink-light);
+}
+.share-legend-bar { width: 110px; height: 10px; border-radius: 3px; }
+.share-legend-hint { margin-left: auto; font-style: italic; }
+
+#stat-tip {
+  display: none;
+  position: fixed;
+  z-index: 1000;
+  max-width: 300px;
+  max-height: 70vh;
+  overflow: hidden;
+  padding: 0.65rem 0.8rem;
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(28, 26, 23, 0.14);
+  font-size: 0.78rem;
+  pointer-events: none;
+}
+#stat-tip .tip-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin-bottom: 0.3rem;
+}
+#stat-tip .tip-title span { font-family: 'DM Sans', sans-serif; font-size: 0.7rem; font-weight: 400; color: var(--ink-light); margin-left: 0.3rem; }
+#stat-tip .tip-list.cols { column-count: 2; column-gap: 1.2rem; }
+#stat-tip .tip-list div { padding: 1px 0; break-inside: avoid; }
+#stat-tip .tip-more { color: var(--ink-light); font-style: italic; }
