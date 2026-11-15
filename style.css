@@ -2330,3 +2330,93 @@ footer {
   font-style: italic;
   line-height: 1.5;
 }
+
+/* ══════════════════════════════════════════
+   SETTINGS — BACKUP
+══════════════════════════════════════════ */
+
+.backup-title {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-mid);
+  margin: 0;
+}
+
+.backup-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  border-top: 1px solid var(--border);
+  padding-top: 1.1rem;
+}
+
+.backup-text,
+.backup-muted,
+.backup-hint {
+  font-size: 0.78rem;
+  line-height: 1.6;
+  color: var(--ink-light);
+}
+
+.backup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.backup-btn {
+  font-size: 0.75rem;
+  padding: 0.4rem 0.95rem;
+}
+
+.backup-import-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.85rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  line-height: 1.55;
+  color: var(--ink-mid);
+}
+
+.backup-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.backup-msg {
+  font-size: 0.78rem;
+  color: #4a7a52;
+  min-height: 0;
+}
+
+.backup-msg:empty { display: none; }
+
+.backup-msg--error {
+  color: #a05050;
+}
+
+.backup-undo {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.75rem;
+  color: var(--ink-mid);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.backup-undo:hover { color: var(--ink); }

@@ -118,6 +118,7 @@ function openSetup() {
   if (tokenEl) tokenEl.value = token;
   if (gistEl)  gistEl.value  = gistId;
   clearSetupError();
+  refreshBackupUI();
   overlay.classList.add("open");
   document.body.style.overflow = "hidden";
 }
@@ -192,6 +193,231 @@ function updateSettingsBtnStyle() {
     btn.classList.remove("settings-connected");
   }
 }
+
+// ══════════════════════════════════════════════════════════════════════
+// BACKUP — export / import
+// ══════════════════════════════════════════════════════════════════════
+
+const STORAGE_PREIMPORT = "oc_pre_import_backup";   // safety copy so an import can be undone
+const BACKUP_FORMAT     = "characters-backup";
+const MAX_BACKUP_BYTES  = 25 * 1024 * 1024;
+
+let _pendingImport = null;   // { fileName, incoming, skipped, plan }
+
+function plural(n, word) { return `${n} ${word}${n === 1 ? "" : "s"}`; }
+
+function backupFileName() {
+  const d = new Date(), p = n => String(n).padStart(2, "0");
+  return `characters-backup-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}.json`;
+}
+
+function setBackupMsg(text, isError) {
+  const el = document.getElementById("backup-msg");
+  if (!el) return;
+  el.textContent = text || "";
+  el.classList.toggle("backup-msg--error", !!isError);
+}
+
+// Everything in the file is rendered through escHtml, but links are put into href/src,
+// so refuse script-ish URLs coming from an imported file.
+const UNSAFE_URL = /^\s*(javascript|vbscript|data:text\/html)/i;
+const cleanUrl = u => (typeof u === "string" && !UNSAFE_URL.test(u)) ? u : "";
+
+function normalizeImported(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  if (typeof raw.name !== "string" || !raw.name.trim()) return null;
+  const c = { ...raw };
+  c.id = (typeof c.id === "string" && c.id.trim()) ? c.id : generateId();
+  ["gallery", "otherArt", "relationships", "details", "stories", "customLinks", "refImages"].forEach(k => {
+    if (!Array.isArray(c[k])) c[k] = [];
+  });
+  if (!c.treeData || typeof c.treeData !== "object" || Array.isArray(c.treeData)) c.treeData = {};
+  if (!c.links || typeof c.links !== "object" || Array.isArray(c.links)) c.links = {};
+
+  c.refImage   = cleanUrl(c.refImage);
+  c.titleImage = cleanUrl(c.titleImage);
+  Object.keys(c.links).forEach(k => { c.links[k] = cleanUrl(c.links[k]); });
+  const objs = arr => arr.filter(x => x && typeof x === "object");
+  c.refImages     = objs(c.refImages).map(x => ({ ...x, src: cleanUrl(x.src) }));
+  c.gallery       = objs(c.gallery).map(x => ({ ...x, src: cleanUrl(x.src) }));
+  c.otherArt      = objs(c.otherArt).map(x => ({ ...x, src: cleanUrl(x.src) }));
+  c.customLinks   = objs(c.customLinks).map(x => ({ ...x, url: cleanUrl(x.url) }));
+  c.relationships = objs(c.relationships).map(x => ({ ...x, link: cleanUrl(x.link) }));
+  c.details       = objs(c.details);
+  c.stories       = objs(c.stories);
+  return c;
+}
+
+function parseBackupText(text) {
+  let data;
+  try { data = JSON.parse(text); }
+  catch (_) { throw new Error("That file isn't valid JSON."); }
+  const list = Array.isArray(data) ? data
+             : (data && Array.isArray(data.characters)) ? data.characters
+             : null;
+  if (!list) throw new Error("That doesn't look like a character backup (no characters list found).");
+  const byId = new Map();
+  let skipped = 0;
+  list.forEach(raw => {
+    const c = normalizeImported(raw);
+    if (!c) { skipped++; return; }
+    byId.set(c.id, c);                 // same id twice in the file: the later one wins
+  });
+  return { incoming: [...byId.values()], skipped };
+}
+
+// Merge: add what's new, replace an existing character only when the file's copy is newer.
+function planMerge(incoming, current) {
+  const merged = current.slice();
+  const idx = new Map(current.map((c, i) => [c.id, i]));
+  const plan = { added: 0, updated: 0, same: 0, keptLocal: 0, merged };
+  incoming.forEach(inc => {
+    if (!idx.has(inc.id)) { merged.push(inc); plan.added++; return; }
+    const i = idx.get(inc.id), cur = merged[i];
+    const a = cur.updatedAt || "", b = inc.updatedAt || "";
+    if (b > a) { merged[i] = inc; plan.updated++; }
+    else if (JSON.stringify(inc) === JSON.stringify(cur)) plan.same++;
+    else plan.keptLocal++;
+  });
+  return plan;
+}
+
+function exportBackup() {
+  const characters = getCharacters();
+  const payload = {
+    format: BACKUP_FORMAT, version: 1,
+    exportedAt: new Date().toISOString(),
+    count: characters.length,
+    characters,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url  = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = backupFileName();
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+  setBackupMsg(`Downloaded ${plural(characters.length, "character")}.`);
+}
+
+function showImportPanel() {
+  const panel = document.getElementById("backup-import-panel");
+  if (!panel || !_pendingImport) return;
+  const { fileName, incoming, skipped, plan } = _pendingImport;
+  const current = getCharacters();
+  const incomingIds = new Set(incoming.map(c => c.id));
+  const wouldRemove = current.filter(c => !incomingIds.has(c.id)).length;
+  const bits = [];
+  if (plan.added)     bits.push(`${plural(plan.added, "new character")} added`);
+  if (plan.updated)   bits.push(`${plural(plan.updated, "character")} updated (the file's copy is newer)`);
+  if (plan.keptLocal) bits.push(`${plural(plan.keptLocal, "character")} kept as they are here (your copy is newer or equal)`);
+  if (plan.same)      bits.push(`${plural(plan.same, "character")} already identical`);
+  panel.innerHTML = `
+    <p class="backup-import-head"><strong>${escHtml(fileName)}</strong> contains ${plural(incoming.length, "character")}${
+      skipped ? ` <span class="backup-muted">(${plural(skipped, "unreadable entry")} skipped)</span>` : ""}.</p>
+    <ul class="backup-list">
+      <li><strong>Merge</strong>: ${bits.length ? bits.join(", ") : "nothing would change"}.</li>
+      <li><strong>Replace</strong>: your characters become exactly the file's${
+        wouldRemove ? `, so ${plural(wouldRemove, "character")} that aren't in the file would be removed` : ""}.</li>
+    </ul>
+    <div class="backup-actions">
+      <button type="button" id="import-merge" class="editor-btn-save backup-btn">Merge</button>
+      <button type="button" id="import-replace" class="editor-btn-delete backup-btn">Replace everything</button>
+      <button type="button" id="import-cancel" class="editor-btn-cancel backup-btn">Cancel</button>
+    </div>
+    <p class="backup-muted">A copy of your current characters is kept, so you can undo the import.</p>`;
+  panel.style.display = "";
+  panel.querySelector("#import-merge").addEventListener("click",   () => applyImport("merge"));
+  panel.querySelector("#import-replace").addEventListener("click", () => applyImport("replace"));
+  panel.querySelector("#import-cancel").addEventListener("click",  cancelImport);
+}
+
+function cancelImport() {
+  _pendingImport = null;
+  const panel = document.getElementById("backup-import-panel");
+  if (panel) { panel.style.display = "none"; panel.innerHTML = ""; }
+}
+
+async function handleBackupFile(file) {
+  cancelImport();
+  setBackupMsg("");
+  if (!file) return;
+  if (file.size > MAX_BACKUP_BYTES) { setBackupMsg("That file is too large to be a character backup.", true); return; }
+  try {
+    const { incoming, skipped } = parseBackupText(await file.text());
+    if (!incoming.length) { setBackupMsg("No readable characters found in that file.", true); return; }
+    _pendingImport = { fileName: file.name, incoming, skipped, plan: planMerge(incoming, getCharacters()) };
+    showImportPanel();
+  } catch (err) {
+    setBackupMsg(err.message || "Couldn't read that file.", true);
+  }
+}
+
+async function applyImport(mode) {
+  const p = _pendingImport;
+  if (!p) return;
+  const current = getCharacters();
+
+  let savedCopy = true;
+  try {
+    localStorage.setItem(STORAGE_PREIMPORT, JSON.stringify({ savedAt: new Date().toISOString(), characters: current }));
+  } catch (_) { savedCopy = false; }
+  if (!savedCopy && mode === "replace" &&
+      !confirm("There isn't room to keep an undo copy of your current characters. Replace them anyway?")) return;
+
+  const next = mode === "replace" ? p.incoming : planMerge(p.incoming, current).merged;
+  const ok = await saveCharacters(next);
+  cancelImport();
+  const container = document.getElementById("char-sections-container");
+  if (container) renderIndexSections(container);
+  refreshBackupUI();
+  setBackupMsg(
+    `${mode === "replace" ? "Replaced with" : "Merged in"} ${plural(p.incoming.length, "character")}. ` +
+    `You now have ${plural(next.length, "character")}.` +
+    (ok ? "" : " Saved here, but syncing to GitHub failed — check the sync icon."),
+    !ok);
+}
+
+async function undoImport() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(STORAGE_PREIMPORT) || "null"); } catch (_) {}
+  if (!saved || !Array.isArray(saved.characters)) { refreshBackupUI(); return; }
+  if (!confirm(`Restore the ${plural(saved.characters.length, "character")} you had before the last import?`)) return;
+  const ok = await saveCharacters(saved.characters);
+  try { localStorage.removeItem(STORAGE_PREIMPORT); } catch (_) {}
+  const container = document.getElementById("char-sections-container");
+  if (container) renderIndexSections(container);
+  refreshBackupUI();
+  setBackupMsg(`Restored ${plural(saved.characters.length, "character")}.` +
+    (ok ? "" : " Saved here, but syncing to GitHub failed — check the sync icon."), !ok);
+}
+
+function refreshBackupUI() {
+  const btn = document.getElementById("backup-undo");
+  if (!btn) return;
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(STORAGE_PREIMPORT) || "null"); } catch (_) {}
+  if (saved && Array.isArray(saved.characters)) {
+    const when = saved.savedAt ? new Date(saved.savedAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "";
+    btn.textContent = `Undo last import${when ? ` (restores the ${plural(saved.characters.length, "character")} from ${when})` : ""}`;
+    btn.style.display = "";
+  } else {
+    btn.style.display = "none";
+  }
+}
+
+function wireBackupUI() {
+  document.getElementById("backup-export")?.addEventListener("click", exportBackup);
+  const fileInput = document.getElementById("backup-file");
+  document.getElementById("backup-import-btn")?.addEventListener("click", () => fileInput?.click());
+  fileInput?.addEventListener("change", async () => {
+    const f = fileInput.files && fileInput.files[0];
+    await handleBackupFile(f);
+    fileInput.value = "";            // lets you pick the same file again
+  });
+  document.getElementById("backup-undo")?.addEventListener("click", undoImport);
+  refreshBackupUI();
+}
+
 
 // ══════════════════════════════════════════════════════════════════════
 // CHARACTER PAGE
@@ -680,12 +906,12 @@ async function handleDetailsFormSubmit(e) {
 // ══════════════════════════════════════════════════════════════════════
 
 const T = {
-  NODE_R:    38,   // slightly larger circles give more room for initials
-  GAP_H:     80,   // extra horizontal gap so wider labels don't collide
-  ROW_H:    130,   // extra vertical gap for 3-line labels
-  CANVAS_W: 1000,  // wider canvas for trees with many members
+  NODE_R:    38,   // circle radius
+  GAP_H:     90,   // horizontal gap between neighbouring circles
+  ROW_H:    150,   // vertical distance between generations (leaves room for 3-line labels + connectors)
+  MIN_VIEW_W: 640, // smallest viewBox width used when fitting a (small) tree
   LABEL_W:  110,   // max px width for text wrap
-  LABEL_MAX: 22,   // chars before we start wrapping label
+  LABEL_MAX: 20,   // chars before we start wrapping label
 };
 
 function getTreeMap(character) {
@@ -703,6 +929,100 @@ function getTreeMap(character) {
   return map;
 }
 
+// Own tree + whatever other characters' trees say about this character.
+// If somebody else's tree mentions this character, that part of the family also shows up on
+// their own Tree tab. This is display-only: nothing is copied into this character's treeData,
+// so removing it on the other profile removes it here too.
+//
+// Returns:
+//   map              name -> { parents, partners, children } (symmetric: every link exists both ways)
+//   inheritedByNode  name -> { parents|partners|children: [{ name, from: { id, name } }] }
+//                    for links that only exist in another profile's tree
+//   via              name -> { id, name } for people who are on the tree ONLY because of another profile
+function buildEffectiveTree(character, allChars) {
+  const focalNorm = normName(character.name);
+  const canon = new Map();            // normalised name -> spelling used in the merged map
+  const canonOf = n => {
+    const k = normName(n);
+    if (k === focalNorm) return character.name;
+    if (!canon.has(k)) canon.set(k, String(n).trim());
+    return canon.get(k);
+  };
+
+  const map = {};
+  const ensure = n => map[n] || (map[n] = { parents: [], partners: [], children: [] });
+  const push = (arr, v) => { if (!arr.includes(v)) arr.push(v); };
+  const edgeKey = (type, a, b) =>
+    type === "pc" ? `pc|${normName(a)}|${normName(b)}` : `pt|${[normName(a), normName(b)].sort().join("|")}`;
+  const have = new Set();
+
+  // returns true if the edge was new
+  function addEdge(type, a, b) {
+    if (!a || !b || normName(a) === normName(b)) return false;
+    const k = edgeKey(type, a, b);
+    if (have.has(k)) return false;
+    have.add(k);
+    if (type === "pc") { push(ensure(a).children, b); push(ensure(b).parents, a); }
+    else               { push(ensure(a).partners, b); push(ensure(b).partners, a); }
+    return true;
+  }
+
+  // Walk a raw tree map. Children and partner lists first, parent lists second, so the order
+  // the user gave in a parent's "children" list (= birth order) is kept.
+  function edgesFrom(tm) {
+    const out = [];
+    Object.entries(tm).forEach(([k, v]) => {
+      const ck = canonOf(k);
+      v.children.forEach(c => out.push(["pc", ck, canonOf(c)]));
+      v.partners.forEach(p => out.push(["pt", ck, canonOf(p)]));
+    });
+    Object.entries(tm).forEach(([k, v]) => {
+      const ck = canonOf(k);
+      v.parents.forEach(p => out.push(["pc", canonOf(p), ck]));
+    });
+    return out;
+  }
+
+  // ── own tree ──
+  const ownTm = getTreeMap(character);
+  Object.keys(ownTm).forEach(k => ensure(canonOf(k)));
+  edgesFrom(ownTm).forEach(([t, a, b]) => addEdge(t, a, b));
+  const ownNodes = new Set(Object.keys(map).map(normName));
+
+  // ── other characters' trees that mention this character ──
+  const inherited = [];
+  (allChars || []).forEach(c => {
+    if (c.id === character.id) return;
+    const theirs = getTreeMap(c);
+    const mentions = Object.entries(theirs).some(([k, v]) =>
+      normName(k) === focalNorm ||
+      ["parents", "partners", "children"].some(r => v[r].some(n => normName(n) === focalNorm)));
+    if (!mentions) return;
+    const from = { id: c.id, name: c.name || "Unnamed" };
+    Object.keys(theirs).forEach(k => ensure(canonOf(k)));
+    edgesFrom(theirs).forEach(([t, a, b]) => { if (addEdge(t, a, b)) inherited.push({ type: t, a, b, from }); });
+  });
+
+  const inheritedByNode = {};
+  const inh = n => inheritedByNode[n] || (inheritedByNode[n] = { parents: [], partners: [], children: [] });
+  inherited.forEach(e => {
+    if (e.type === "pc") {
+      inh(e.a).children.push({ name: e.b, from: e.from });
+      inh(e.b).parents.push({ name: e.a, from: e.from });
+    } else {
+      inh(e.a).partners.push({ name: e.b, from: e.from });
+      inh(e.b).partners.push({ name: e.a, from: e.from });
+    }
+  });
+
+  const via = {};
+  inherited.forEach(e => [e.a, e.b].forEach(n => {
+    if (!ownNodes.has(normName(n)) && normName(n) !== focalNorm && !via[n]) via[n] = e.from;
+  }));
+
+  return { map, inheritedByNode, via };
+}
+
 async function saveTreeMap(charId, map) {
   const chars = getCharacters();
   const idx   = chars.findIndex(c => c.id === charId);
@@ -716,6 +1036,9 @@ let _treeEditMode = false;
 
 function renderTree(charId) {
   _treeCharId = charId;
+  _treeView = null;
+  _treeBounds = null;
+  _treeTouched = false;
   const panel = document.getElementById("panel-tree");
   if (!panel) return;
 
@@ -730,13 +1053,19 @@ function renderTree(charId) {
           </label>
         </label>
         <span class="tree-edit-hint" id="tree-edit-hint">Click any node to edit its connections</span>
+        <span class="tree-pan-hint">Drag to pan · Ctrl + scroll or pinch to zoom</span>
       </div>
       <div class="tree-body" id="tree-body">
         <div class="tree-sidebar-wrap" id="tree-sidebar-wrap">
           <!-- sidebar content injected here -->
         </div>
         <div class="tree-canvas-wrap" id="tree-canvas-wrap">
-          <svg id="tree-svg" class="tree-svg" xmlns="http://www.w3.org/2000/svg" width="100%"></svg>
+          <svg id="tree-svg" class="tree-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+          <div class="tree-zoom">
+            <button type="button" data-z="in"  title="Zoom in"  aria-label="Zoom in">+</button>
+            <button type="button" data-z="out" title="Zoom out" aria-label="Zoom out">−</button>
+            <button type="button" data-z="fit" title="Fit tree to view" aria-label="Fit tree to view">⤢</button>
+          </div>
         </div>
       </div>
     </div>
@@ -745,6 +1074,16 @@ function renderTree(charId) {
   _treeEditMode = false;
   showTreeDefaultSidebar(charId);
   redrawTree(charId);
+  wireTreePanZoom(document.getElementById("tree-svg"));
+
+  panel.querySelectorAll(".tree-zoom button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const z = btn.dataset.z;
+      if (z === "in")  zoomTree(1 / 1.3);
+      if (z === "out") zoomTree(1.3);
+      if (z === "fit") fitTreeView();
+    });
+  });
 
   document.getElementById("tree-edit-toggle").addEventListener("change", function() {
     _treeEditMode = this.checked;
@@ -785,7 +1124,8 @@ function showTreeDefaultSidebar(charId) {
   const chars     = getCharacters();
   const character = chars.find(c => c.id === charId);
   if (!character) return;
-  const map      = getTreeMap(character);
+  const eff      = buildEffectiveTree(character, chars);
+  const map      = eff.map;
   const focalKey = character.name;
 
   const relMap = {};
@@ -890,6 +1230,7 @@ function showTreeDefaultSidebar(charId) {
           <div class="tree-sb-name-row">${nameHtml}</div>
           <div class="tree-sb-meta-row">
             <span class="tree-sb-role ${roleClass}">${escHtml(treeRole)}</span>
+            ${eff.via[name] ? `<span class="tree-sb-via" title="On this tree because of ${escHtml(eff.via[name].name)}'s profile">via ${escHtml(eff.via[name].name)}</span>` : ""}
             ${relType
               ? `<span class="tree-sb-reltype">${escHtml(relType)}</span>`
               : `<button class="tree-sb-add-rel" data-name="${escHtml(name)}" title="Add relationship type">+ add rel. type</button>`
@@ -934,27 +1275,41 @@ function showNodeEditSidebar(charId, nodeName) {
   const chars     = getCharacters();
   const character = chars.find(c => c.id === charId);
   if (!character) return;
-  const map      = getTreeMap(character);
+  const map      = getTreeMap(character);          // this profile's own tree (what gets edited)
+  const eff      = buildEffectiveTree(character, chars);
+  const inh      = eff.inheritedByNode[nodeName] || { parents: [], partners: [], children: [] };
   const nodeData = map[nodeName] || { parents: [], partners: [], children: [] };
 
   // Build suggestions from: (1) names already in the tree map, (2) relationship names —
   // but exclude names that were removed/pruned from the map so stale entries don't reappear.
-  const mapNames = Object.keys(map).filter(n => n !== nodeName);
+  const mapNames = Object.keys(eff.map).filter(n => n !== nodeName);
   const relNames = (character.relationships || []).map(r => r.name).filter(Boolean);
   const suggestions = [...new Set([...mapNames, ...relNames])].filter(Boolean);
 
   function roleSection(roleKey, label, colorClass) {
     const members = nodeData[roleKey] || [];
-    const pills   = members.map(name => `
+    // order matters for children (birth order, left to right) and partners
+    const canMove = roleKey !== "parents" && members.length > 1;
+    const pills   = members.map((name, i) => `
       <span class="tree-pill">
+        ${canMove && i > 0 ? `<button type="button" class="tree-pill-mv" data-role="${roleKey}" data-name="${escHtml(name)}" data-dir="-1" title="Move earlier">‹</button>` : ""}
         ${escHtml(name)}
+        ${canMove && i < members.length - 1 ? `<button type="button" class="tree-pill-mv" data-role="${roleKey}" data-name="${escHtml(name)}" data-dir="1" title="Move later">›</button>` : ""}
         <button class="tree-pill-rm" data-role="${roleKey}" data-name="${escHtml(name)}" title="Remove">✕</button>
+      </span>`).join("");
+    // links that only exist in another profile's tree: shown, but edited over there
+    const inheritedPills = (inh[roleKey] || [])
+      .filter(x => !members.some(m => normName(m) === normName(x.name)))
+      .map(x => `
+      <span class="tree-pill tree-pill--inherited" title="Comes from ${escHtml(x.from.name)}'s tree — edit it there">
+        ${escHtml(x.name)}
+        <a class="tree-pill-src" href="character.html?id=${escHtml(x.from.id)}" title="Open ${escHtml(x.from.name)}">↗</a>
       </span>`).join("");
 
     return `
       <div class="tree-sb-section">
         <p class="tree-sb-role ${colorClass}">${label}</p>
-        <div class="tree-pills" id="pills-${roleKey}">${pills || '<span class="tree-pill-empty">None</span>'}</div>
+        <div class="tree-pills" id="pills-${roleKey}">${(pills + inheritedPills) || '<span class="tree-pill-empty">None</span>'}</div>
         <div class="tree-add-row">
           <input type="text" class="tree-add-input" id="add-input-${roleKey}"
             placeholder="Add name…" list="tree-suggestions-${roleKey}" autocomplete="off"/>
@@ -966,7 +1321,7 @@ function showNodeEditSidebar(charId, nodeName) {
       </div>`;
   }
 
-  const isNodeOnTree = !!map[nodeName];
+  const isNodeOnTree = !!eff.map[nodeName];
   const isFocal = nodeName === character.name;
 
   wrap.innerHTML = `
@@ -1006,6 +1361,31 @@ function showNodeEditSidebar(charId, nodeName) {
       // FIX 4: prune empty non-focal nodes
       pruneTreeMap(map2, char2.name);
 
+      await saveTreeMap(charId, map2);
+      showNodeEditSidebar(charId, nodeName);
+      redrawTree(charId);
+    });
+  });
+
+  wrap.querySelectorAll(".tree-pill-mv").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const role = btn.dataset.role;
+      const name = btn.dataset.name;
+      const dir  = parseInt(btn.dataset.dir, 10);
+      const char2 = getCharacters().find(c => c.id === charId);
+      const map2  = getTreeMap(char2);
+      const list  = map2[nodeName]?.[role];
+      if (!list) return;
+      const i = list.indexOf(name), j = i + dir;
+      if (i < 0 || j < 0 || j >= list.length) return;
+      const other = list[j];
+      const swapIn = arr => {
+        const a = arr.indexOf(name), b = arr.indexOf(other);
+        if (a >= 0 && b >= 0) { arr[a] = other; arr[b] = name; }
+      };
+      // siblings share their order across all of their parents' lists
+      if (role === "children") Object.values(map2).forEach(nd => swapIn(nd.children));
+      else swapIn(list);
       await saveTreeMap(charId, map2);
       showNodeEditSidebar(charId, nodeName);
       redrawTree(charId);
@@ -1088,6 +1468,262 @@ function wrapTreeLabel(name, maxChars) {
   return [line1, rest.slice(0, b2), rest.slice(b2 + 1)];
 }
 
+// ── Layout ────────────────────────────────────────────────────────────
+// 1. Everybody gets a generation (row): parents above, children below, partners beside.
+// 2. Partners in the same row are chained into a "unit" that moves as one block, so a
+//    person with several partners keeps them all next to them.
+// 3. Units are ordered and positioned with a few down/up passes (children sit under their
+//    parents, parents over their children). Siblings keep the order of the parent's
+//    "children" list. Spacing is solved without overlaps (isotonic regression).
+function layoutFamilyTree(map, focalKey) {
+  const STEP  = T.NODE_R * 2 + T.GAP_H;
+  const EMPTY = { parents: [], partners: [], children: [] };
+  const get   = n => map[n] || EMPTY;
+  const mean  = a => a.reduce((s, v) => s + v, 0) / a.length;
+
+  // 1. generations — BFS over the whole connected family
+  const gen   = new Map([[focalKey, 0]]);
+  const order = [focalKey];
+  for (let qi = 0; qi < order.length; qi++) {
+    const n = order[qi], g = gen.get(n), nd = get(n);
+    const visit = (m, mg) => { if (map[m] && !gen.has(m)) { gen.set(m, mg); order.push(m); } };
+    nd.parents.forEach(p  => visit(p, g - 1));
+    nd.partners.forEach(p => visit(p, g));
+    nd.children.forEach(c => visit(c, g + 1));
+  }
+  const disc = new Map(order.map((n, i) => [n, i]));
+  const byDisc = (a, b) => disc.get(a) - disc.get(b);
+
+  const rows = new Map();
+  order.forEach(n => {
+    const g = gen.get(n);
+    if (!rows.has(g)) rows.set(g, []);
+    rows.get(g).push(n);
+  });
+  const rowKeys = [...rows.keys()].sort((a, b) => a - b);
+
+  // 2. partner units
+  function chainOrder(comp) {
+    if (comp.length < 3) return comp.slice().sort(byDisc);
+    const inComp = new Set(comp);
+    const nbrs = n => get(n).partners.filter(p => inComp.has(p)).sort(byDisc);
+    const start = comp.slice().sort((a, b) => nbrs(a).length - nbrs(b).length || byDisc(a, b))[0];
+    const out = [], seen = new Set();
+    (function walk(n) {
+      seen.add(n); out.push(n);
+      nbrs(n).forEach(p => { if (!seen.has(p)) walk(p); });
+    })(start);
+    return out;
+  }
+  const sibOf = u => {
+    let best = Infinity;
+    u.members.forEach(m => get(m).parents.forEach(p => {
+      const i = get(p).children.indexOf(m);
+      if (i >= 0 && i < best) best = i;
+    }));
+    return best;
+  };
+
+  const unitsByRow = new Map();
+  rowKeys.forEach(g => {
+    const names = rows.get(g), inRow = new Set(names), seen = new Set(), units = [];
+    names.forEach(n => {
+      if (seen.has(n)) return;
+      const comp = [], stack = [n];
+      seen.add(n);
+      while (stack.length) {
+        const x = stack.pop();
+        comp.push(x);
+        get(x).partners.forEach(p => { if (inRow.has(p) && !seen.has(p)) { seen.add(p); stack.push(p); } });
+      }
+      const u = { row: g, members: chainOrder(comp), cx: 0, sib: Infinity };
+      u.sib = sibOf(u);
+      units.push(u);
+    });
+    unitsByRow.set(g, units);
+  });
+
+  // 3. positions
+  const xOf = new Map();
+  const uw  = u => (u.members.length - 1) * STEP;
+
+  // Put the units of one row (already in order) as close as possible to their desired
+  // centres without overlapping: isotonic regression (pool adjacent violators) on the
+  // offsets from a tightly packed row.
+  function solveRow(units, desired) {
+    const n = units.length;
+    const offs = [];
+    let o = 0;
+    for (let i = 0; i < n; i++) {
+      if (i > 0) o += (uw(units[i - 1]) + uw(units[i])) / 2 + STEP;
+      offs.push(o);
+    }
+    const d = desired || offs.map(v => v - offs[n - 1] / 2);
+    const blocks = [];
+    for (let i = 0; i < n; i++) {
+      const w = units[i].members.length;
+      blocks.push({ sum: (d[i] - offs[i]) * w, w, cnt: 1 });
+      while (blocks.length > 1) {
+        const b = blocks[blocks.length - 1], a = blocks[blocks.length - 2];
+        if (a.sum / a.w > b.sum / b.w) { a.sum += b.sum; a.w += b.w; a.cnt += b.cnt; blocks.pop(); }
+        else break;
+      }
+    }
+    let i = 0;
+    blocks.forEach(b => {
+      const y = b.sum / b.w;
+      for (let k = 0; k < b.cnt; k++, i++) {
+        const u = units[i];
+        u.cx = y + offs[i];
+        u.members.forEach((m, j) => xOf.set(m, u.cx - uw(u) / 2 + j * STEP));
+      }
+    });
+  }
+
+  rowKeys.forEach(g => solveRow(unitsByRow.get(g), null));
+
+  const centerOf = (u, role, delta) => {
+    const xs = [];
+    u.members.forEach(m => get(m)[role].forEach(p => {
+      if (xOf.has(p) && gen.get(p) === gen.get(m) + delta) xs.push(xOf.get(p));
+    }));
+    return xs.length ? mean(xs) : null;
+  };
+  const q = v => Math.round(v * 2) / 2;
+  const pass = (g, down) => {
+    const items = unitsByRow.get(g).map(u => ({
+      u, d: (down ? centerOf(u, "parents", -1) : centerOf(u, "children", 1)) ?? u.cx,
+    }));
+    items.sort((a, b) => (q(a.d) - q(b.d)) || (a.u.sib - b.u.sib) || (a.u.cx - b.u.cx));
+    unitsByRow.set(g, items.map(i => i.u));
+    solveRow(unitsByRow.get(g), items.map(i => i.d));
+  };
+  for (let it = 0; it < 6; it++) {
+    rowKeys.slice(1).forEach(g => pass(g, true));
+    rowKeys.slice(0, -1).reverse().forEach(g => pass(g, false));
+  }
+  rowKeys.slice(1).forEach(g => pass(g, true));
+
+  // final coordinates
+  let minX = Infinity;
+  xOf.forEach(x => { minX = Math.min(minX, x); });
+  const Y_TOP = T.NODE_R + 30;
+  const pos = new Map();
+  xOf.forEach((x, n) => pos.set(n, { x: x - minX, y: Y_TOP + (gen.get(n) - rowKeys[0]) * T.ROW_H }));
+  const unitOf = new Map();
+  unitsByRow.forEach(units => units.forEach(u => u.members.forEach((m, i) => unitOf.set(m, { u, i }))));
+  return { pos, gen, unitOf };
+}
+
+// ── Pan / zoom ────────────────────────────────────────────────────────
+let _treeView    = null;   // current viewBox { x, y, w, h }
+let _treeBounds  = null;   // bounds of the drawn tree
+let _treeTouched = false;  // user panned/zoomed -> don't auto-fit on redraw
+let _treeFitW    = 1000;
+let _treeResizeWired = false;
+
+function treeRect() {
+  const svg = document.getElementById("tree-svg");
+  const r = svg ? svg.getBoundingClientRect() : null;
+  return { w: r && r.width > 0 ? r.width : 800, h: r && r.height > 0 ? r.height : 520 };
+}
+
+function applyTreeView() {
+  const svg = document.getElementById("tree-svg");
+  if (!svg || !_treeView) return;
+  const v = _treeView;
+  svg.setAttribute("viewBox", `${v.x} ${v.y} ${v.w} ${v.h}`);
+}
+
+function fitTreeView() {
+  const b = _treeBounds;
+  if (!b) return;
+  const r = treeRect();
+  const s = Math.max(Math.max(b.w, T.MIN_VIEW_W) / r.w, b.h / r.h);
+  const w = s * r.w, h = s * r.h;
+  _treeView = { x: b.x + b.w / 2 - w / 2, y: b.y + b.h / 2 - h / 2, w, h };
+  _treeFitW = w;
+  _treeTouched = false;
+  applyTreeView();
+}
+
+// factor < 1 zooms in, > 1 zooms out; px/py = zoom centre in screen px inside the svg
+function zoomTree(factor, px, py) {
+  if (!_treeView) return;
+  const r = treeRect(), v = _treeView;
+  const nw = Math.min(_treeFitW * 4, Math.max(_treeFitW * 0.12, v.w * factor));
+  const f = nw / v.w, nh = v.h * f;
+  const fx = (px ?? r.w / 2) / r.w, fy = (py ?? r.h / 2) / r.h;
+  v.x += (v.w - nw) * fx;
+  v.y += (v.h - nh) * fy;
+  v.w = nw; v.h = nh;
+  _treeTouched = true;
+  applyTreeView();
+}
+
+function wireTreePanZoom(svg) {
+  if (!svg) return;
+  const pts = new Map();
+
+  svg.addEventListener("pointerdown", e => {
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, moved: false });
+  });
+
+  svg.addEventListener("pointermove", e => {
+    const p = pts.get(e.pointerId);
+    if (!p || !_treeView) return;
+    const r = svg.getBoundingClientRect();
+    if (pts.size === 1) {
+      if (!p.moved && Math.hypot(e.clientX - p.sx, e.clientY - p.sy) < 5) return;
+      if (!p.moved) {
+        p.moved = true;
+        // capturing only once a real drag starts keeps plain clicks on nodes working
+        try { svg.setPointerCapture(e.pointerId); } catch (_) {}
+        svg.classList.add("panning");
+      }
+      const dx = e.clientX - p.x, dy = e.clientY - p.y;
+      p.x = e.clientX; p.y = e.clientY;
+      _treeView.x -= dx * _treeView.w / r.width;
+      _treeView.y -= dy * _treeView.h / r.height;
+      _treeTouched = true;
+      applyTreeView();
+    } else if (pts.size === 2) {
+      const other = [...pts.entries()].find(([id]) => id !== e.pointerId)[1];
+      const oldD = Math.hypot(p.x - other.x, p.y - other.y);
+      p.x = e.clientX; p.y = e.clientY;
+      const newD = Math.hypot(p.x - other.x, p.y - other.y);
+      p.moved = true;
+      if (oldD > 0 && newD > 0) {
+        zoomTree(oldD / newD, (p.x + other.x) / 2 - r.left, (p.y + other.y) / 2 - r.top);
+      }
+    }
+  });
+
+  const end = e => {
+    pts.delete(e.pointerId);
+    if (!pts.size) svg.classList.remove("panning");
+  };
+  svg.addEventListener("pointerup", end);
+  svg.addEventListener("pointercancel", end);
+
+  svg.addEventListener("wheel", e => {
+    if (!(e.ctrlKey || e.metaKey)) return;       // plain scrolling still scrolls the page
+    e.preventDefault();
+    const r = svg.getBoundingClientRect();
+    zoomTree(Math.exp(e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top);
+  }, { passive: false });
+
+  if (!_treeResizeWired) {
+    _treeResizeWired = true;
+    window.addEventListener("resize", () => {
+      if (!document.getElementById("tree-svg") || !_treeView) return;
+      if (!_treeTouched) fitTreeView();
+      else { const r = treeRect(); _treeView.h = _treeView.w * r.h / r.w; applyTreeView(); }
+    });
+  }
+}
+
+// ── Drawing ───────────────────────────────────────────────────────────
 function redrawTree(charId) {
   const svg = document.getElementById("tree-svg");
   if (!svg) return;
@@ -1095,111 +1731,39 @@ function redrawTree(charId) {
   const character = chars.find(c => c.id === charId);
   if (!character) return;
 
-  const map      = getTreeMap(character);
+  const eff      = buildEffectiveTree(character, chars);
+  const map      = eff.map;
   const focalKey = character.name;
-
-  const placed   = new Map();
-  const rowSlots = new Map();
-
-  function ensureRow(row) {
-    if (!rowSlots.has(row)) rowSlots.set(row, []);
-  }
-
-  function placeNode(name, row) {
-    if (placed.has(name)) return;
-    // FIX 4: only place nodes that actually exist in the map (except focal)
-    if (name !== focalKey && !map[name]) return;
-    ensureRow(row);
-    rowSlots.get(row).push(name);
-    placed.set(name, { row });
-  }
-
-  placeNode(focalKey, 0);
-
-  const queue   = [{ name: focalKey, row: 0 }];
-  const visited = new Set([focalKey]);
-
-  while (queue.length) {
-    const { name, row } = queue.shift();
-    const nd = map[name];
-    if (!nd) continue;
-
-    (nd.parents || []).forEach(p => {
-      if (!visited.has(p) && map[p]) {
-        visited.add(p);
-        placeNode(p, row - 1);
-        queue.push({ name: p, row: row - 1 });
-      }
-    });
-
-    (nd.children || []).forEach(c => {
-      if (!visited.has(c) && map[c]) {
-        visited.add(c);
-        placeNode(c, row + 1);
-        queue.push({ name: c, row: row + 1 });
-      }
-    });
-
-    (nd.partners || []).forEach(p => {
-      if (!visited.has(p) && map[p]) {
-        visited.add(p);
-        placeNode(p, row);
-      }
-    });
-  }
-
-  const nodePos = new Map();
-  const rowNums = Array.from(rowSlots.keys()).sort((a,b) => a-b);
-  const minRow  = rowNums[0] ?? 0;
-  const maxRow  = rowNums[rowNums.length - 1] ?? 0;
-
-  const STEP  = T.NODE_R * 2 + T.GAP_H;
-  const CX    = T.CANVAS_W / 2;
-  const Y_TOP = 60;
-
-  rowNums.forEach(row => {
-    const names  = rowSlots.get(row);
-    const count  = names.length;
-    const totalW = (count - 1) * STEP;
-    const startX = CX - totalW / 2;
-    const y      = Y_TOP + (row - minRow) * T.ROW_H;
-    names.forEach((name, i) => {
-      nodePos.set(name, { x: startX + i * STEP, y });
-    });
-  });
+  const R        = T.NODE_R;
+  const get      = n => map[n] || { parents: [], partners: [], children: [] };
+  const { pos, gen, unitOf } = layoutFamilyTree(map, focalKey);
 
   const LABEL_LINE_H = 15;
-  // Allow up to 3 label lines below each node
-  const svgH = Y_TOP + (maxRow - minRow) * T.ROW_H + T.NODE_R * 2 + LABEL_LINE_H * 3 + 50;
-
   let clipIdN = 0;
   const mkCid = () => `tc${++clipIdN}_${Date.now()}`;
 
   let defs   = `<defs>`;
   let conns  = ``;
   let nodes_ = ``;
+  let hasArc = false;
 
+  const sameName = (a, b) => (a || "").toLowerCase().trim() === (b || "").toLowerCase().trim();
   function getImg(name) {
-    const m = chars.find(c => (c.name||"").toLowerCase().trim() === (name||"").toLowerCase().trim());
+    const m = chars.find(c => sameName(c.name, name));
     return m ? (m.titleImage || m.refImage || "") : "";
   }
-
   function getHref(name) {
-    const m = chars.find(c =>
-      c.id !== charId &&
-      (c.name||"").toLowerCase().trim() === (name||"").toLowerCase().trim()
-    );
+    const m = chars.find(c => c.id !== charId && sameName(c.name, name));
     return m && !m.mini ? `character.html?id=${m.id}` : "";
   }
 
   function drawNode(name, x, y, isFocal) {
-    const r      = isFocal ? T.NODE_R + 4 : T.NODE_R;
+    const r      = isFocal ? R + 4 : R;
     const cid    = mkCid();
     const img    = getImg(name);
     const href   = getHref(name);
     const init   = (name[0] || "?").toUpperCase();
-
-    // FIX 5: wrap label into up to 2 lines
+    const via    = eff.via[name];
     const lines  = wrapTreeLabel(name, T.LABEL_MAX);
 
     defs += `<clipPath id="${cid}"><circle cx="${x}" cy="${y}" r="${r}"/></clipPath>`;
@@ -1210,28 +1774,34 @@ function redrawTree(charId) {
            font-family="Cormorant Garamond,serif" font-size="${Math.round(r*0.85)}"
            fill="var(--ink-light)">${escHtml(init)}</text>`;
 
-    const ring     = isFocal ? `stroke="var(--ink)" stroke-width="2.5"` : `stroke="var(--border)" stroke-width="1.5"`;
-    const cursor   = _treeEditMode ? `style="cursor:pointer"` : ((href || !isFocal) ? `style="cursor:pointer"` : "");
-    const dataEdit = _treeEditMode ? `data-editnode="${escHtml(name)}"` : "";
-    const dataHref = (!_treeEditMode && href) ? `data-href="${escHtml(href)}"` : "";
+    // dashed ring = this person is on the tree only because of another profile
+    const ring = isFocal ? `stroke="var(--ink)" stroke-width="2.5"`
+               : via     ? `stroke="var(--ink-light)" stroke-width="1.5" stroke-dasharray="5 4"`
+                         : `stroke="var(--border)" stroke-width="1.5"`;
+    const clickable  = _treeEditMode || href || !isFocal;
+    const cursor     = clickable ? `style="cursor:pointer"` : "";
+    const dataEdit   = _treeEditMode ? `data-editnode="${escHtml(name)}"` : "";
+    const dataHref   = (!_treeEditMode && href) ? `data-href="${escHtml(href)}"` : "";
     const dataPerson = (!_treeEditMode && !href && !isFocal) ? `data-person="${escHtml(name)}"` : "";
+    const tip        = via ? `<title>${escHtml(name)} — from ${escHtml(via.name)}'s tree</title>` : "";
 
     const badge = _treeEditMode ? `
       <circle cx="${x+r-4}" cy="${y-r+4}" r="10" fill="var(--card)" stroke="var(--border)" stroke-width="1"/>
       <text x="${x+r-4}" y="${y-r+4}" text-anchor="middle" dominant-baseline="central"
         font-family="DM Sans,sans-serif" font-size="11" fill="var(--ink-mid)">✎</text>` : "";
 
-    // FIX 5: multi-line label using <tspan>
-    const labelY   = y + r + 16;
-    const tspans   = lines.map((line, i) =>
+    const labelY  = y + r + 16;
+    const tspans  = lines.map((line, i) =>
       `<tspan x="${x}" dy="${i === 0 ? 0 : LABEL_LINE_H}">${escHtml(line)}</tspan>`
     ).join("");
-    const labelEl  = `<text x="${x}" y="${labelY}" text-anchor="middle"
+    const labelEl = `<text x="${x}" y="${labelY}" text-anchor="middle"
         font-family="DM Sans,sans-serif" font-size="12" font-weight="${isFocal ? '600' : '400'}"
-        fill="${isFocal ? 'var(--ink)' : 'var(--ink-mid)'}">${tspans}</text>`;
+        fill="${isFocal ? 'var(--ink)' : 'var(--ink-mid)'}"
+        stroke="var(--surface)" stroke-width="4" stroke-linejoin="round" paint-order="stroke">${tspans}</text>`;
 
     return `
       <g class="tree-node" ${cursor} ${dataEdit} ${dataHref} ${dataPerson}>
+        ${tip}
         <circle cx="${x}" cy="${y}" r="${r}" fill="var(--card)" ${ring}/>
         ${imgEl}
         ${badge}
@@ -1239,154 +1809,107 @@ function redrawTree(charId) {
       </g>`;
   }
 
-  function drawConn(x1, y1, x2, y2, type) {
-    if (type === "partner") {
-      const mx = (x1 + x2) / 2;
-      const my = (y1 + y2) / 2;
-      return `
-        <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="tree-conn tree-conn-partner"/>
-        <text x="${mx}" y="${my - 7}" text-anchor="middle" font-size="13"
-          font-family="serif" fill="var(--ink-light)">♥</text>`;
-    }
-    const midy = (y1 + y2) / 2;
-    return `<path d="M${x1} ${y1} C${x1} ${midy},${x2} ${midy},${x2} ${y2}"
-      fill="none" class="tree-conn"/>`;
-  }
+  const heart = (x, y) =>
+    `<text x="${x}" y="${y}" text-anchor="middle" font-size="13" font-family="serif" fill="var(--ink-light)">♥</text>`;
 
-  const drawnConns    = new Set();
-  const drawnParentBus = new Set(); // track T-bars already drawn for a parent group
-  function connKey(a, b) { return [a,b].sort().join("|||"); }
-
-  // Build a lookup: parentName → [childNames that are actually placed]
-  const parentToChildren = new Map();
-  placed.forEach((_, name) => {
-    const nd = map[name];
-    if (!nd) return;
-    (nd.children || []).forEach(cname => {
-      if (!nodePos.get(cname)) return;
-      if (!parentToChildren.has(name)) parentToChildren.set(name, []);
-      if (!parentToChildren.get(name).includes(cname)) parentToChildren.get(name).push(cname);
-    });
-  });
-
-  // Draw partner lines first
-  placed.forEach((_, name) => {
-    const nd  = map[name];
-    const pos = nodePos.get(name);
-    if (!nd || !pos) return;
-    (nd.partners || []).forEach(pname => {
-      const ppos = nodePos.get(pname);
-      if (!ppos) return;
-      const k = connKey(name, pname);
-      if (drawnConns.has(k)) return;
-      drawnConns.add(k);
-      const lx = Math.min(pos.x, ppos.x) + T.NODE_R;
-      const rx = Math.max(pos.x, ppos.x) - T.NODE_R;
-      conns += drawConn(lx, pos.y, rx, pos.y, "partner");
-    });
-  });
-
-  // Draw parent→children connections using T-bar routing when >1 child
-  parentToChildren.forEach((children, parentName) => {
-    const ppos = nodePos.get(parentName);
-    if (!ppos) return;
-
-    // Collect the co-parents of this set of children so we can find
-    // the midpoint between all parents on the same row (for the bar origin)
-    const coParents = new Set([parentName]);
-    children.forEach(cname => {
-      const cnd = map[cname];
-      if (!cnd) return;
-      (cnd.parents || []).forEach(p => { if (nodePos.get(p)) coParents.add(p); });
-    });
-
-    // X origin of the vertical drop: midpoint of all co-parents
-    const coParentXs = Array.from(coParents).map(p => nodePos.get(p)?.x).filter(x => x != null);
-    const originX    = coParentXs.reduce((s, x) => s + x, 0) / coParentXs.length;
-    const originY    = ppos.y + T.NODE_R;
-
-    // Midpoint Y between parent row and child row
-    const anyChildPos = nodePos.get(children[0]);
-    if (!anyChildPos) return;
-    const busY = (originY + (anyChildPos.y - T.NODE_R)) / 2;
-
-    // Avoid duplicating the same bus for co-parent groups
-    const busKey = [...coParents].sort().join("|||") + "|||" + children.sort().join("|||");
-
-    if (children.length === 1) {
-      // Single child — simple bezier, no bus needed
-      const cpos = nodePos.get(children[0]);
-      if (!cpos) return;
-      const k = connKey(parentName, children[0]);
-      if (!drawnConns.has(k)) {
-        drawnConns.add(k);
-        conns += drawConn(ppos.x, ppos.y + T.NODE_R, cpos.x, cpos.y - T.NODE_R, "parent");
+  // ── partner lines ──
+  const drawnPairs = new Set();
+  pos.forEach((p, name) => {
+    get(name).partners.forEach(other => {
+      const o = pos.get(other);
+      if (!o || p.y !== o.y) return;
+      const k = [name, other].sort().join("|||");
+      if (drawnPairs.has(k)) return;
+      drawnPairs.add(k);
+      const [l, r] = p.x <= o.x ? [p, o] : [o, p];
+      const ua = unitOf.get(name), ub = unitOf.get(other);
+      const adjacent = ua && ub && ua.u === ub.u && Math.abs(ua.i - ub.i) === 1;
+      if (adjacent) {
+        conns += `<line x1="${l.x + R}" y1="${l.y}" x2="${r.x - R}" y2="${r.y}" class="tree-conn tree-conn-partner"/>`
+               + heart((l.x + r.x) / 2, l.y - 7);
+      } else {
+        // not next to each other (a person with 3+ partners): arc over the people in between
+        hasArc = true;
+        const top = l.y - R;
+        conns += `<path d="M${l.x} ${top} C${l.x} ${top - 44},${r.x} ${top - 44},${r.x} ${top}" class="tree-conn tree-conn-partner"/>`
+               + heart((l.x + r.x) / 2, top - 30);
       }
+    });
+  });
+
+  // ── parent → children: children are grouped by their exact set of parents ──
+  const groups = new Map();
+  pos.forEach((_, child) => {
+    const ps = get(child).parents.filter(p => pos.has(p) && gen.get(p) === gen.get(child) - 1);
+    if (!ps.length) return;
+    ps.sort((a, b) => pos.get(a).x - pos.get(b).x);
+    const key = ps.join("|||");
+    if (!groups.has(key)) groups.set(key, { parents: ps, children: [] });
+    groups.get(key).children.push(child);
+  });
+
+  const staggerByRow = new Map();
+  groups.forEach(gr => {
+    const pPos = gr.parents.map(p => pos.get(p));
+    const py   = pPos[0].y;
+    const cy   = pos.get(gr.children[0]).y;
+    const idx  = staggerByRow.get(py) || 0;
+    staggerByRow.set(py, idx + 1);
+    const busY = cy - R - 22 - (idx % 3) * 8;
+
+    const ua = gr.parents.length === 2 ? unitOf.get(gr.parents[0]) : null;
+    const ub = gr.parents.length === 2 ? unitOf.get(gr.parents[1]) : null;
+    const isCouple = ua && ub && ua.u === ub.u && Math.abs(ua.i - ub.i) === 1 &&
+                     get(gr.parents[0]).partners.includes(gr.parents[1]);
+
+    const xs = gr.children.map(c => pos.get(c).x);
+    if (isCouple) {
+      const mx = (pPos[0].x + pPos[1].x) / 2;      // drop from the middle of the partner line
+      conns += `<line x1="${mx}" y1="${py}" x2="${mx}" y2="${busY}" class="tree-conn"/>`;
+      xs.push(mx);
     } else {
-      // Multiple children — T-bar
-      if (!drawnParentBus.has(busKey)) {
-        drawnParentBus.add(busKey);
-
-        // Vertical from each co-parent down to bus
-        coParents.forEach(p => {
-          const pp = nodePos.get(p);
-          if (!pp) return;
-          conns += `<line x1="${pp.x}" y1="${pp.y + T.NODE_R}" x2="${pp.x}" y2="${busY}" class="tree-conn"/>`;
-        });
-
-        // Horizontal bus merging co-parents to a single origin if >1 co-parent
-        if (coParents.size > 1) {
-          const minCPX = Math.min(...coParentXs);
-          const maxCPX = Math.max(...coParentXs);
-          conns += `<line x1="${minCPX}" y1="${busY}" x2="${maxCPX}" y2="${busY}" class="tree-conn"/>`;
-        }
-
-        // Horizontal bus spanning all children
-        const childXs = children.map(c => nodePos.get(c)?.x).filter(x => x != null);
-        const minX    = Math.min(...childXs, originX);
-        const maxX    = Math.max(...childXs, originX);
-        conns += `<line x1="${minX}" y1="${busY}" x2="${maxX}" y2="${busY}" class="tree-conn"/>`;
-
-        // Vertical from bus origin down to bus (only if single parent and not already drawn)
-        if (coParents.size === 1) {
-          conns += `<line x1="${originX}" y1="${ppos.y + T.NODE_R}" x2="${originX}" y2="${busY}" class="tree-conn"/>`;
-        }
-      }
-
-      // Vertical from bus down to each child
-      children.forEach(cname => {
-        const cpos = nodePos.get(cname);
-        if (!cpos) return;
-        const k = connKey(parentName, cname);
-        if (!drawnConns.has(k)) {
-          drawnConns.add(k);
-          conns += `<line x1="${cpos.x}" y1="${busY}" x2="${cpos.x}" y2="${cpos.y - T.NODE_R}" class="tree-conn"/>`;
-        }
+      pPos.forEach(pp => {
+        conns += `<line x1="${pp.x}" y1="${py + R}" x2="${pp.x}" y2="${busY}" class="tree-conn"/>`;
+        xs.push(pp.x);
       });
     }
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+    if (maxX > minX) conns += `<line x1="${minX}" y1="${busY}" x2="${maxX}" y2="${busY}" class="tree-conn"/>`;
+    gr.children.forEach(c => {
+      const cp = pos.get(c);
+      conns += `<line x1="${cp.x}" y1="${busY}" x2="${cp.x}" y2="${cp.y - R}" class="tree-conn"/>`;
+    });
   });
 
-  placed.forEach((_, name) => {
-    const pos = nodePos.get(name);
-    if (!pos) return;
-    if (name !== focalKey) {
-      nodes_ += drawNode(name, pos.x, pos.y, false);
-    }
-  });
-  const fpos = nodePos.get(focalKey);
+  // ── nodes (focal last so it sits on top) ──
+  pos.forEach((p, name) => { if (name !== focalKey) nodes_ += drawNode(name, p.x, p.y, false); });
+  const fpos = pos.get(focalKey);
   if (fpos) nodes_ += drawNode(focalKey, fpos.x, fpos.y, true);
 
   defs += `</defs>`;
 
-  const hasContent = placed.size > 1;
-  const emptyHint  = !hasContent ? `
-    <text x="${CX}" y="${Y_TOP + T.NODE_R + 44}" text-anchor="middle"
+  const emptyHint = pos.size <= 1 && fpos ? `
+    <text x="${fpos.x}" y="${fpos.y + R + 54}" text-anchor="middle"
       font-family="DM Sans,sans-serif" font-size="13" fill="var(--ink-light)">
       Turn on Edit mode and click this node to add family members
     </text>` : "";
 
-  svg.setAttribute("viewBox", `0 0 ${T.CANVAS_W} ${svgH}`);
+  // bounds of everything drawn, for fit-to-view
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  pos.forEach(p => {
+    minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+    minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+  });
+  const topPad = hasArc ? 90 : 36, botPad = 16 + LABEL_LINE_H * 2 + 28;
+  _treeBounds = {
+    x: minX - (R + 4) - 50,
+    y: minY - (R + 4) - topPad,
+    w: (maxX - minX) + 2 * (R + 4) + 100,
+    h: (maxY - minY) + 2 * (R + 4) + topPad + botPad,
+  };
+
   svg.innerHTML = defs + conns + nodes_ + emptyHint;
+  if (!_treeTouched || !_treeView) fitTreeView(); else applyTreeView();
 
   svg.querySelectorAll("[data-href]").forEach(el => {
     el.addEventListener("click", () => window.location.href = el.getAttribute("data-href"));
@@ -1396,12 +1919,12 @@ function redrawTree(charId) {
   if (_treeEditMode) {
     svg.querySelectorAll("[data-editnode]").forEach(el => {
       el.addEventListener("click", () => {
-        const name = el.getAttribute("data-editnode");
-        showNodeEditSidebar(_treeCharId, name);
+        showNodeEditSidebar(_treeCharId, el.getAttribute("data-editnode"));
       });
     });
   }
 }
+
 
 // ══════════════════════════════════════════════════════════════════════
 // SHARED: sentence boundary + expand/collapse
@@ -2909,6 +3432,7 @@ document.addEventListener("DOMContentLoaded", function () {
   });
   loadIndexPage();
   loadCharacterPage();
+  wireBackupUI();
 
   // ── Editor modal  ──
   document.getElementById("editor-close")?.addEventListener("click", closeEditor);
