@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Statistics — June's Character Storage</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600&family=DM+Sans:wght@300;400;500&display=swap"
+    rel="stylesheet" />
+
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="stats.css" />
+</head>
+
+<body>
+
+  <nav>
+    <a href="index.html" class="nav-logo">June's Character Storage</a>
+    <div class="nav-right">
+      <a href="index.html" class="nav-stats-btn">← Back to characters</a>
+      <span id="sync-status" class="sync-status" title=""></span>
+    </div>
+  </nav>
+
+  <main class="stats-wrap">
+    <header class="stats-header">
+      <h1 class="stats-title">Statistics</h1>
+      <p class="stats-sub">Everything below is calculated live from your characters. Mini profiles are not counted.</p>
+    </header>
+
+    <div id="stats-root">
+      <p class="empty-state">Loading…</p>
+    </div>
+  </main>
+
+  <footer>
+    <span class="footer-logo">June's Character Storage</span>
+    <span class="footer-copy">© 2026 — All rights reserved</span>
+  </footer>
+
+  <!-- script.js provides getCharacters(), loadFromGist(), escHtml() etc. -->
+  <script src="script.js"></script>
+  <script src="stats.js"></script>
+</body>
+
+</html>

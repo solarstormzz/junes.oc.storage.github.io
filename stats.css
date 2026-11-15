@@ -1,0 +1,173 @@
+/* ══════════════════════════════════════════
+   STATS PAGE  (uses the variables from style.css)
+══════════════════════════════════════════ */
+
+/* Nav button on the homepage + link on the stats page */
+.nav-stats-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  min-width: 34px;
+  padding: 0 0.6rem;
+  flex-shrink: 0;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-decoration: none;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--ink-mid);
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+.nav-stats-btn:hover {
+  color: var(--ink);
+  border-color: #b5afa6;
+  background: var(--surface);
+}
+
+.stats-wrap {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 2.5rem 2rem 4rem;
+}
+
+.stats-header { margin-bottom: 2rem; }
+.stats-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 500;
+  font-size: 2.6rem;
+  letter-spacing: 0.02em;
+}
+.stats-sub { color: var(--ink-light); font-size: 0.85rem; margin-top: 0.25rem; }
+
+/* ── Big number tiles ── */
+.stat-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.85rem;
+  margin-bottom: 1.5rem;
+}
+.stat-tile {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.1rem;
+}
+.stat-tile-num {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 2.2rem;
+  font-weight: 500;
+  line-height: 1;
+}
+.stat-tile-label {
+  margin-top: 0.4rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-light);
+}
+
+/* ── Cards ── */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 1.1rem;
+}
+.stat-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.2rem 1.3rem 1.3rem;
+  min-width: 0;
+}
+.stat-card h2 {
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 500;
+  font-size: 1.35rem;
+  margin-bottom: 0.15rem;
+}
+.stat-card-note {
+  font-size: 0.72rem;
+  color: var(--ink-light);
+  margin-bottom: 0.9rem;
+}
+
+/* ── Horizontal bars ── */
+.bar-row {
+  display: grid;
+  grid-template-columns: minmax(70px, 34%) 1fr 2.2rem;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.18rem 0;
+  font-size: 0.8rem;
+}
+.bar-label {
+  color: var(--ink-mid);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bar-track {
+  height: 14px;
+  background: var(--surface);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  min-width: 2px;
+  transition: width 0.5s ease;
+}
+.bar-fill.soft { background: #a8a198; }
+.bar-val { text-align: right; font-weight: 500; font-variant-numeric: tabular-nums; }
+
+/* ── Vertical column chart (birthday months) ── */
+.col-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 140px;
+  padding-top: 0.5rem;
+}
+.col-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+  min-width: 0;
+}
+.col-bar { width: 100%; background: var(--accent); border-radius: 3px 3px 0 0; min-height: 2px; }
+.col-bar.empty { background: var(--surface); }
+.col-val { font-size: 0.68rem; color: var(--ink-mid); margin-bottom: 2px; }
+.col-label { font-size: 0.68rem; color: var(--ink-light); margin-top: 4px; }
+
+/* ── Leaderboards ── */
+.lb-row {
+  display: grid;
+  grid-template-columns: 1.6rem 1fr auto;
+  gap: 0.6rem;
+  align-items: baseline;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--surface);
+  font-size: 0.85rem;
+}
+.lb-row:last-child { border-bottom: none; }
+.lb-rank { color: var(--ink-light); font-variant-numeric: tabular-nums; }
+.lb-name { color: var(--ink); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-name:hover { text-decoration: underline; }
+.lb-fandom { color: var(--ink-light); font-size: 0.72rem; margin-left: 0.4rem; }
+.lb-val { font-weight: 500; font-variant-numeric: tabular-nums; }
+
+.stat-empty { font-size: 0.8rem; color: var(--ink-light); font-style: italic; }
+
+@media (max-width: 700px) {
+  .stats-wrap { padding: 1.5rem 1rem 3rem; }
+  .stat-grid { grid-template-columns: 1fr; }
+}
