@@ -76,6 +76,20 @@
   // "Italian-Irish", "Italian & Irish", "Italian/Irish", "Italian, Irish" → separate heritages
   const splitHeritage = h => clean(h).split(/[,\/&;\-–—]| and /i).map(clean).filter(Boolean).map(titleCase);
 
+   // "F1 Driver (Ferrari)" → F1 Driver
+// "Journalist, working at the New York Post" → Journalist
+// "Writer / Illustrator" or "Chef & Baker" → two separate jobs
+function splitOccupation(o) {
+  let s = clean(o), prev;
+  do {                                                   // strip (…), […], {…}, nested too
+    prev = s;
+    s = s.replace(/[\(\[\{][^\(\)\[\]\{\}]*[\)\]\}]/g, " ");
+  } while (s !== prev);
+  s = s.replace(/[\(\[\{].*$/, " ");                     // unclosed bracket: drop the rest
+  s = s.split(",")[0];                                   // keep only what's before the first comma
+  return s.split(/[\/&]/).map(clean).filter(Boolean).map(titleCase);
+}
+
   // ── colour by share of the whole ─────────────────────────────────────
   // 0% = pale dusty blue, 50%+ = deep plum. Everything in between is a smooth blend.
   function shareColor(share) {
@@ -151,10 +165,10 @@
     const max = Math.max(...rows.map(r => r.count), 1);
 
     const html = rows.map((r, i) => {
-      const share = r.count / total;
-      const pct = share * 100 < 1 ? "<1%" : Math.round(share * 100) + "%";
-      const color = r.soft ? "#b9b3aa" : shareColor(share);
-      return `
+  const share = r.count / total;
+  const pct = r.count === 0 ? "0%" : share * 100 < 1 ? "<1%" : Math.round(share * 100) + "%";
+  const color = r.soft ? "#b9b3aa" : shareColor(share);
+  return `
       <div class="bar-row${i >= limit ? " bar-extra" : ""}" data-tip="${addTip(r.label, r.chars)}">
         <span class="bar-label">${escHtml(r.label)}</span>
         <span class="bar-track"><span class="bar-fill" style="width:${(r.count / max) * 100}%;background:${color}"></span></span>
@@ -240,7 +254,9 @@
     // Pronouns / heritage / occupation
     const pronounCard  = card("Pronouns", "", barChart(groupBy(chars, c => normPronouns(c.pronouns)), 10));
     const heritageCard = card("Heritage", "Split on commas, slashes, hyphens, “&” and “and”, so mixed heritage counts for each part.", barChart(groupBy(chars, c => splitHeritage(c.heritage)), 10));
-    const occCard      = card("Occupations", "", barChart(groupBy(chars, c => c.occupation), 10));
+    const occCard = card("Occupations",
+  "Brackets and anything after a comma are ignored; “/” and “&” count as separate jobs.",
+  barChart(groupBy(chars, c => splitOccupation(c.occupation)), 10));
 
     // Birthday months
     const monthChars = Array.from({ length: 12 }, () => []);
