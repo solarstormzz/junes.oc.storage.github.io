@@ -63,8 +63,11 @@ async function loadFromGist() {
   setStatus("syncing");
   try {
     const characters = await gistGet();
+    const migrated = migrateToIds(characters);
     localStorage.setItem(STORAGE_LOCAL, JSON.stringify(characters));
     setStatus("ok");
+    // Old name-based data was converted: write the converted version back to the Gist too.
+    if (migrated) await saveCharacters(characters);
     return characters;
   } catch (err) {
     setStatus("error", err.message);
@@ -93,6 +96,217 @@ async function saveCharacters(list) {
     console.error("Gist save error:", err);
     return false;
   }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// CHARACTER IDS
+// Everything that points at another character (relationships, family trees,
+// gallery tags, story tags) stores that character's `id`. Names are only used
+// for display and for typing — they are resolved to an id when you save.
+// ══════════════════════════════════════════════════════════════════════
+
+function normName(n) { return (n || "").toLowerCase().trim(); }
+
+// Display labels. Normally the name; if two characters share a name the fandom is
+// added in brackets, and if that still clashes a short id tail is appended.
+function buildPeopleIndex(chars) {
+  const byName = new Map();
+  chars.forEach(c => {
+    const k = normName(c.name);
+    if (!k) return;
+    if (!byName.has(k)) byName.set(k, []);
+    byName.get(k).push(c);
+  });
+  const clean = s => String(s).replace(/,/g, " ").replace(/\s+/g, " ").trim();
+  const labelOf = new Map();
+  chars.forEach(c => {
+    let label = clean(c.name || "Unnamed");
+    if ((byName.get(normName(c.name)) || []).length > 1) label += ` (${clean(c.fandom || "no fandom")})`;
+    labelOf.set(c.id, label);
+  });
+  const counts = new Map();
+  chars.forEach(c => { const l = normName(labelOf.get(c.id)); counts.set(l, (counts.get(l) || 0) + 1); });
+  chars.forEach(c => {
+    if (counts.get(normName(labelOf.get(c.id))) > 1) labelOf.set(c.id, labelOf.get(c.id) + " #" + String(c.id).slice(-4));
+  });
+  const byLabel = new Map();
+  chars.forEach(c => {
+    const l = normName(labelOf.get(c.id));
+    if (!byLabel.has(l)) byLabel.set(l, []);
+    byLabel.get(l).push(c);
+  });
+  return { byName, byLabel, labelOf };
+}
+
+// Typed text -> matching characters. A label match (unique) wins, otherwise a name match.
+// 0 results = unknown, 1 = resolved, 2+ = ambiguous.
+function findPeople(chars, text, idx) {
+  idx = idx || buildPeopleIndex(chars);
+  const k = normName(text);
+  if (!k) return [];
+  const byLabel = idx.byLabel.get(k);
+  if (byLabel && byLabel.length === 1) return byLabel;
+  return idx.byName.get(k) || [];
+}
+
+function resolveTagText(text, chars, ownerId) {
+  const idx = buildPeopleIndex(chars);
+  const ids = [], unknown = [], ambiguous = [];
+  (text || "").split(",").map(t => t.trim()).filter(Boolean).forEach(t => {
+    const found = findPeople(chars, t, idx);
+    if (found.length === 1) {
+      if (found[0].id !== ownerId && !ids.includes(found[0].id)) ids.push(found[0].id);
+    } else if (found.length > 1) ambiguous.push(t);
+    else unknown.push(t);
+  });
+  return { ids, unknown, ambiguous };
+}
+
+function tagProblems(r) {
+  const out = [];
+  if (r.unknown.length)   out.push(`No character called: ${r.unknown.join(", ")}.`);
+  if (r.ambiguous.length) out.push(`More than one character is called: ${r.ambiguous.join(", ")} — pick one from the suggestions (the entries with the fandom in brackets).`);
+  return out.join("\n");
+}
+
+// Tags as editable text: current names of the tagged ids, plus any legacy names that
+// could not be matched to a character (they stay visible so you can fix them).
+function tagsToText(item, chars) {
+  chars = chars || getCharacters();
+  const idx = buildPeopleIndex(chars);
+  const names = (item?.characterIds || []).map(id => idx.labelOf.get(id)).filter(Boolean);
+  return [...names, ...(item?.unresolvedTags || [])].join(", ");
+}
+
+function peopleOptionsHtml(chars, excludeId) {
+  const idx = buildPeopleIndex(chars);
+  return chars.filter(c => c.id !== excludeId && c.name)
+    .map(c => `<option value="${escHtml(idx.labelOf.get(c.id))}">`).join("");
+}
+
+function ensureDatalist(id, html) {
+  let dl = document.getElementById(id);
+  if (!dl) { dl = document.createElement("datalist"); dl.id = id; document.body.appendChild(dl); }
+  dl.innerHTML = html;
+}
+
+function makeMini(name, from, id) {
+  const now = new Date().toISOString();
+  return {
+    id: id || generateId(), mini: true, idLinks: true, name: String(name).trim(),
+    fandom: from?.fandom || "", pronouns: "", age: "", birthday: "", heritage: "", occupation: "",
+    appearance: "", overview: "", background: "", history: "", nicknames: "",
+    refImage: "", titleImage: "", refImages: [], links: {}, customLinks: [],
+    gallery: [], otherArt: [], relationships: [], treeData: {}, details: [], stories: [],
+    createdAt: now, updatedAt: now,
+  };
+}
+
+// Deterministic id for minis created by the migration, so two devices migrating the
+// same old data end up with the same ids instead of duplicate minis.
+function stableMiniId(name) {
+  const s = normName(name);
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return "m" + (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+}
+
+// One-time, idempotent conversion of name-based data to id-based data.
+// Characters that were converted carry `idLinks: true`. Returns true if anything changed.
+function migrateToIds(chars) {
+  const pending = chars.filter(c => !c.idLinks);
+  if (!pending.length) return false;
+
+  const byName = new Map();
+  chars.forEach(c => {
+    const k = normName(c.name);
+    if (!k) return;
+    if (!byName.has(k)) byName.set(k, []);
+    byName.get(k).push(c);
+  });
+  const lookup = name => {
+    const list = byName.get(normName(name)) || [];
+    return list.find(c => !c.mini) || list[0] || null;
+  };
+  // Existing character by that name, otherwise a (hidden) mini profile so the link has a target.
+  const ensure = (name, from) => {
+    const hit = lookup(name);
+    if (hit) return hit.id;
+    const mini = makeMini(name, from, stableMiniId(name));
+    chars.push(mini);
+    byName.set(normName(name), [mini]);
+    return mini.id;
+  };
+
+  pending.forEach(c => {
+    c.relationships = (c.relationships || []).map(r => {
+      const id = r.name ? ensure(r.name, c) : null;
+      return { ...r, charId: id && id !== c.id ? id : null };
+    });
+
+    const oldTree = c.treeData && typeof c.treeData === "object" ? c.treeData : {};
+    const newTree = {};
+    const toId = n => (normName(n) === normName(c.name) ? c.id : ensure(n, c));
+    Object.entries(oldTree).forEach(([k, v]) => {
+      if (!v || typeof v !== "object" || Array.isArray(v)) return;
+      const kid = toId(k);
+      const node = newTree[kid] || (newTree[kid] = { parents: [], partners: [], children: [] });
+      ["parents", "partners", "children"].forEach(role => {
+        (Array.isArray(v[role]) ? v[role] : []).forEach(n => {
+          const id = toId(n);
+          if (id !== kid && !node[role].includes(id)) node[role].push(id);
+        });
+      });
+    });
+    c.treeData = newTree;
+
+    const convertTags = list => (list || []).forEach(x => {
+      if (x.characterIds) return;
+      const ids = [], unresolved = [];
+      (x.characters || "").split(",").map(t => t.trim()).filter(Boolean).forEach(t => {
+        const m = lookup(t);
+        if (m) { if (m.id !== c.id && !ids.includes(m.id)) ids.push(m.id); }
+        else unresolved.push(t);
+      });
+      x.characterIds = ids;
+      if (unresolved.length) x.unresolvedTags = unresolved;
+      delete x.characters;
+    });
+    convertTags(c.gallery);
+    convertTags(c.stories);
+
+    c.idLinks = true;
+  });
+  return true;
+}
+
+function ensureMigrated() {
+  const chars = getCharacters();
+  if (migrateToIds(chars)) saveCharacters(chars);
+}
+
+// Call after removing a character: nothing may keep pointing at a missing id.
+// Relationship rows keep their text (as a plain, unlinked name); trees and tags just drop it.
+function purgeCharId(chars, id, deletedName) {
+  const roles = ["parents", "partners", "children"];
+  chars.forEach(c => {
+    (c.relationships || []).forEach(r => {
+      if (r.charId === id) { r.charId = null; r.name = deletedName || r.name || ""; }
+    });
+    [...(c.gallery || []), ...(c.stories || [])].forEach(x => {
+      if (x.characterIds) x.characterIds = x.characterIds.filter(i => i !== id);
+    });
+    if (c.treeData && typeof c.treeData === "object") {
+      delete c.treeData[id];
+      Object.values(c.treeData).forEach(nd => roles.forEach(r => { nd[r] = (nd[r] || []).filter(i => i !== id); }));
+    }
+  });
 }
 
 function generateId() {
@@ -245,6 +459,7 @@ function normalizeImported(raw) {
   c.relationships = objs(c.relationships).map(x => ({ ...x, link: cleanUrl(x.link) }));
   c.details       = objs(c.details);
   c.stories       = objs(c.stories);
+  [...c.gallery, ...c.stories].forEach(x => { if (x.characterIds && !Array.isArray(x.characterIds)) delete x.characterIds; });
   return c;
 }
 
@@ -365,6 +580,7 @@ async function applyImport(mode) {
       !confirm("There isn't room to keep an undo copy of your current characters. Replace them anyway?")) return;
 
   const next = mode === "replace" ? p.incoming : planMerge(p.incoming, current).merged;
+  migrateToIds(next);   // a backup made before IDs existed is converted here
   const ok = await saveCharacters(next);
   cancelImport();
   const container = document.getElementById("char-sections-container");
@@ -935,30 +1151,26 @@ function getTreeMap(character) {
 // so removing it on the other profile removes it here too.
 //
 // Returns:
-//   map              name -> { parents, partners, children } (symmetric: every link exists both ways)
-//   inheritedByNode  name -> { parents|partners|children: [{ name, from: { id, name } }] }
+//   map              id -> { parents, partners, children } (symmetric: every link exists both ways)
+//   inheritedByNode  id -> { parents|partners|children: [{ id, from: { id, name } }] }
 //                    for links that only exist in another profile's tree
-//   via              name -> { id, name } for people who are on the tree ONLY because of another profile
+//   via              id -> { id, name } for people who are on the tree ONLY because of another profile
+// Tree nodes are character ids; ids whose character no longer exists are dropped.
 function buildEffectiveTree(character, allChars) {
-  const focalNorm = normName(character.name);
-  const canon = new Map();            // normalised name -> spelling used in the merged map
-  const canonOf = n => {
-    const k = normName(n);
-    if (k === focalNorm) return character.name;
-    if (!canon.has(k)) canon.set(k, String(n).trim());
-    return canon.get(k);
-  };
+  const focalId = character.id;
+  const known = new Set((allChars || []).map(c => c.id));
+  const alive = id => !allChars || known.has(id);
 
   const map = {};
   const ensure = n => map[n] || (map[n] = { parents: [], partners: [], children: [] });
   const push = (arr, v) => { if (!arr.includes(v)) arr.push(v); };
   const edgeKey = (type, a, b) =>
-    type === "pc" ? `pc|${normName(a)}|${normName(b)}` : `pt|${[normName(a), normName(b)].sort().join("|")}`;
+    type === "pc" ? `pc|${a}|${b}` : `pt|${[a, b].sort().join("|")}`;
   const have = new Set();
 
   // returns true if the edge was new
   function addEdge(type, a, b) {
-    if (!a || !b || normName(a) === normName(b)) return false;
+    if (!a || !b || a === b || !alive(a) || !alive(b)) return false;
     const k = edgeKey(type, a, b);
     if (have.has(k)) return false;
     have.add(k);
@@ -972,22 +1184,20 @@ function buildEffectiveTree(character, allChars) {
   function edgesFrom(tm) {
     const out = [];
     Object.entries(tm).forEach(([k, v]) => {
-      const ck = canonOf(k);
-      v.children.forEach(c => out.push(["pc", ck, canonOf(c)]));
-      v.partners.forEach(p => out.push(["pt", ck, canonOf(p)]));
+      v.children.forEach(c => out.push(["pc", k, c]));
+      v.partners.forEach(p => out.push(["pt", k, p]));
     });
     Object.entries(tm).forEach(([k, v]) => {
-      const ck = canonOf(k);
-      v.parents.forEach(p => out.push(["pc", canonOf(p), ck]));
+      v.parents.forEach(p => out.push(["pc", p, k]));
     });
     return out;
   }
 
   // ── own tree ──
   const ownTm = getTreeMap(character);
-  Object.keys(ownTm).forEach(k => ensure(canonOf(k)));
+  Object.keys(ownTm).forEach(k => { if (alive(k)) ensure(k); });
   edgesFrom(ownTm).forEach(([t, a, b]) => addEdge(t, a, b));
-  const ownNodes = new Set(Object.keys(map).map(normName));
+  const ownNodes = new Set(Object.keys(map));
 
   // ── other characters' trees that mention this character ──
   const inherited = [];
@@ -995,11 +1205,10 @@ function buildEffectiveTree(character, allChars) {
     if (c.id === character.id) return;
     const theirs = getTreeMap(c);
     const mentions = Object.entries(theirs).some(([k, v]) =>
-      normName(k) === focalNorm ||
-      ["parents", "partners", "children"].some(r => v[r].some(n => normName(n) === focalNorm)));
+      k === focalId || ["parents", "partners", "children"].some(r => v[r].includes(focalId)));
     if (!mentions) return;
     const from = { id: c.id, name: c.name || "Unnamed" };
-    Object.keys(theirs).forEach(k => ensure(canonOf(k)));
+    Object.keys(theirs).forEach(k => { if (alive(k)) ensure(k); });
     edgesFrom(theirs).forEach(([t, a, b]) => { if (addEdge(t, a, b)) inherited.push({ type: t, a, b, from }); });
   });
 
@@ -1007,17 +1216,17 @@ function buildEffectiveTree(character, allChars) {
   const inh = n => inheritedByNode[n] || (inheritedByNode[n] = { parents: [], partners: [], children: [] });
   inherited.forEach(e => {
     if (e.type === "pc") {
-      inh(e.a).children.push({ name: e.b, from: e.from });
-      inh(e.b).parents.push({ name: e.a, from: e.from });
+      inh(e.a).children.push({ id: e.b, from: e.from });
+      inh(e.b).parents.push({ id: e.a, from: e.from });
     } else {
-      inh(e.a).partners.push({ name: e.b, from: e.from });
-      inh(e.b).partners.push({ name: e.a, from: e.from });
+      inh(e.a).partners.push({ id: e.b, from: e.from });
+      inh(e.b).partners.push({ id: e.a, from: e.from });
     }
   });
 
   const via = {};
   inherited.forEach(e => [e.a, e.b].forEach(n => {
-    if (!ownNodes.has(normName(n)) && normName(n) !== focalNorm && !via[n]) via[n] = e.from;
+    if (!ownNodes.has(n) && n !== focalId && !via[n]) via[n] = e.from;
   }));
 
   return { map, inheritedByNode, via };
@@ -1126,20 +1335,21 @@ function showTreeDefaultSidebar(charId) {
   if (!character) return;
   const eff      = buildEffectiveTree(character, chars);
   const map      = eff.map;
-  const focalKey = character.name;
+  const focalKey = character.id;
+  const byId     = id => chars.find(c => c.id === id);
 
   const relMap = {};
   (character.relationships || []).forEach(r => {
-    if (r.name) relMap[r.name.toLowerCase().trim()] = r.type || "";
+    if (r.charId) relMap[r.charId] = r.type || "";
   });
 
   const focalData = map[focalKey] || { parents: [], partners: [], children: [] };
 
   const treeRoles = {};
 
-  function assignRole(names, role) {
-    (names || []).forEach(n => {
-      // FIX 4: only list names that actually exist as keys in the map
+  function assignRole(ids, role) {
+    (ids || []).forEach(n => {
+      // FIX 4: only list people that actually exist as keys in the map
       if (n !== focalKey && !treeRoles[n] && map[n]) treeRoles[n] = role;
     });
   }
@@ -1148,34 +1358,34 @@ function showTreeDefaultSidebar(charId) {
   assignRole(focalData.partners, "Partner");
   assignRole(focalData.children, "Child");
 
-  Object.entries(map).forEach(([nodeName, nd]) => {
-    if (nodeName === focalKey) return;
-    if (!map[nodeName]) return; // FIX 4: skip pruned nodes
+  Object.entries(map).forEach(([nodeId, nd]) => {
+    if (nodeId === focalKey) return;
+    if (!map[nodeId]) return; // FIX 4: skip pruned nodes
 
     if ((nd.parents || []).some(p => (focalData.parents || []).includes(p))) {
-      if (!treeRoles[nodeName]) treeRoles[nodeName] = "Sibling";
+      if (!treeRoles[nodeId]) treeRoles[nodeId] = "Sibling";
     }
 
     (focalData.parents || []).forEach(parent => {
       const parentData = map[parent];
       if (!parentData) return;
-      if ((parentData.parents || []).includes(nodeName) && !treeRoles[nodeName]) {
-        treeRoles[nodeName] = "Grandparent";
+      if ((parentData.parents || []).includes(nodeId) && !treeRoles[nodeId]) {
+        treeRoles[nodeId] = "Grandparent";
       }
     });
 
     (focalData.children || []).forEach(child => {
       const childData = map[child];
       if (!childData) return;
-      if ((childData.children || []).includes(nodeName) && !treeRoles[nodeName]) {
-        treeRoles[nodeName] = "Grandchild";
+      if ((childData.children || []).includes(nodeId) && !treeRoles[nodeId]) {
+        treeRoles[nodeId] = "Grandchild";
       }
     });
 
-    if (!treeRoles[nodeName] && map[nodeName]) treeRoles[nodeName] = "Family";
+    if (!treeRoles[nodeId] && map[nodeId]) treeRoles[nodeId] = "Family";
   });
 
-  const entries = Object.entries(treeRoles);
+  const entries = Object.entries(treeRoles).filter(([id]) => byId(id));
 
   if (!entries.length) {
     wrap.innerHTML = `
@@ -1190,28 +1400,27 @@ function showTreeDefaultSidebar(charId) {
   entries.sort((a, b) => {
     const ai = roleOrder.indexOf(a[1]);
     const bi = roleOrder.indexOf(b[1]);
-    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi) || a[0].localeCompare(b[0]);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi) ||
+      (byId(a[0]).name || "").localeCompare(byId(b[0]).name || "");
   });
 
-  const rows = entries.map(([name, treeRole]) => {
-    const relType = relMap[name.toLowerCase().trim()];
-    const otherChar = chars.find(c =>
-      c.id !== charId &&
-      (c.name || "").toLowerCase().trim() === name.toLowerCase().trim()
-    );
-    const img  = otherChar ? (otherChar.titleImage || otherChar.refImage || "") : "";
-    const href = otherChar && !otherChar.mini ? `character.html?id=${escHtml(otherChar.id)}` : "";
+  const rows = entries.map(([id, treeRole]) => {
+    const person = byId(id);
+    const name   = person.name || "Unnamed";
+    const relType = relMap[id];
+    const img  = person.titleImage || person.refImage || "";
+    const href = !person.mini ? `character.html?id=${escHtml(person.id)}` : "";
 
     const avatarHtml = img
       ? `<img src="${escHtml(img)}" class="tree-sb-avatar" alt="" />`
       : `<div class="tree-sb-avatar tree-sb-avatar-placeholder">${escHtml((name[0] || "?").toUpperCase())}</div>`;
 
     const nameHtml = href
-      ? `<a href="${escHtml(href)}" class="tree-sb-name tree-sb-name-link">${escHtml(name)}</a>`
-      : `<a href="#" class="tree-sb-name tree-sb-name-link" data-person="${escHtml(name)}">${escHtml(name)}</a>`;
+      ? `<a href="${href}" class="tree-sb-name tree-sb-name-link">${escHtml(name)}</a>`
+      : `<a href="#" class="tree-sb-name tree-sb-name-link" data-person-id="${escHtml(id)}">${escHtml(name)}</a>`;
     const avatarLink = href
       ? `<a href="${href}" class="rel-avatar-link">${avatarHtml}</a>`
-      : `<a href="#" class="rel-avatar-link" data-person="${escHtml(name)}">${avatarHtml}</a>`;
+      : `<a href="#" class="rel-avatar-link" data-person-id="${escHtml(id)}">${avatarHtml}</a>`;
 
     const roleClass = {
       Parent:      "tree-sb-role--parent",
@@ -1230,10 +1439,10 @@ function showTreeDefaultSidebar(charId) {
           <div class="tree-sb-name-row">${nameHtml}</div>
           <div class="tree-sb-meta-row">
             <span class="tree-sb-role ${roleClass}">${escHtml(treeRole)}</span>
-            ${eff.via[name] ? `<span class="tree-sb-via" title="On this tree because of ${escHtml(eff.via[name].name)}'s profile">via ${escHtml(eff.via[name].name)}</span>` : ""}
+            ${eff.via[id] ? `<span class="tree-sb-via" title="On this tree because of ${escHtml(eff.via[id].name)}'s profile">via ${escHtml(eff.via[id].name)}</span>` : ""}
             ${relType
               ? `<span class="tree-sb-reltype">${escHtml(relType)}</span>`
-              : `<button class="tree-sb-add-rel" data-name="${escHtml(name)}" title="Add relationship type">+ add rel. type</button>`
+              : `<button class="tree-sb-add-rel" data-id="${escHtml(id)}" data-name="${escHtml(name)}" title="Add relationship type">+ add rel. type</button>`
             }
           </div>
         </div>
@@ -1252,15 +1461,12 @@ function showTreeDefaultSidebar(charId) {
     btn.addEventListener("click", () => {
       openRelationshipEditor(charId);
       setTimeout(() => {
-        const name = btn.dataset.name;
+        const id = btn.dataset.id;
         const rows = document.querySelectorAll("#rel-editor-rows .rel-editor-row");
         let found = false;
-        rows.forEach(tr => {
-          const inp = tr.querySelector(".rel-r-name");
-          if (inp && inp.value.trim().toLowerCase() === name.toLowerCase()) found = true;
-        });
+        rows.forEach(tr => { if (tr.dataset.charId === id) found = true; });
         if (!found) {
-          addRelRow({ name });
+          addRelRow({ charId: id, name: btn.dataset.name });
           const tbody = document.getElementById("rel-editor-rows");
           if (tbody) tbody.lastElementChild?.scrollIntoView({ behavior: "smooth", block: "nearest" });
         }
@@ -1269,7 +1475,7 @@ function showTreeDefaultSidebar(charId) {
   });
 }
 
-function showNodeEditSidebar(charId, nodeName) {
+function showNodeEditSidebar(charId, nodeId) {
   const wrap = document.getElementById("tree-sidebar-wrap");
   if (!wrap) return;
   const chars     = getCharacters();
@@ -1277,32 +1483,32 @@ function showNodeEditSidebar(charId, nodeName) {
   if (!character) return;
   const map      = getTreeMap(character);          // this profile's own tree (what gets edited)
   const eff      = buildEffectiveTree(character, chars);
-  const inh      = eff.inheritedByNode[nodeName] || { parents: [], partners: [], children: [] };
-  const nodeData = map[nodeName] || { parents: [], partners: [], children: [] };
+  const inh      = eff.inheritedByNode[nodeId] || { parents: [], partners: [], children: [] };
+  const nodeData = map[nodeId] || { parents: [], partners: [], children: [] };
+  const nodeChar = chars.find(c => c.id === nodeId);
+  const idx      = buildPeopleIndex(chars);
+  const labelOf  = id => idx.labelOf.get(id) || "(deleted character)";
 
-  // Build suggestions from: (1) names already in the tree map, (2) relationship names —
-  // but exclude names that were removed/pruned from the map so stale entries don't reappear.
-  const mapNames = Object.keys(eff.map).filter(n => n !== nodeName);
-  const relNames = (character.relationships || []).map(r => r.name).filter(Boolean);
-  const suggestions = [...new Set([...mapNames, ...relNames])].filter(Boolean);
+  // Suggestions: every character on the site (by label), so you can only link real people.
+  const optionsHtml = peopleOptionsHtml(chars, nodeId);
 
   function roleSection(roleKey, label, colorClass) {
     const members = nodeData[roleKey] || [];
     // order matters for children (birth order, left to right) and partners
     const canMove = roleKey !== "parents" && members.length > 1;
-    const pills   = members.map((name, i) => `
+    const pills   = members.map((id, i) => `
       <span class="tree-pill">
-        ${canMove && i > 0 ? `<button type="button" class="tree-pill-mv" data-role="${roleKey}" data-name="${escHtml(name)}" data-dir="-1" title="Move earlier">‹</button>` : ""}
-        ${escHtml(name)}
-        ${canMove && i < members.length - 1 ? `<button type="button" class="tree-pill-mv" data-role="${roleKey}" data-name="${escHtml(name)}" data-dir="1" title="Move later">›</button>` : ""}
-        <button class="tree-pill-rm" data-role="${roleKey}" data-name="${escHtml(name)}" title="Remove">✕</button>
+        ${canMove && i > 0 ? `<button type="button" class="tree-pill-mv" data-role="${roleKey}" data-id="${escHtml(id)}" data-dir="-1" title="Move earlier">‹</button>` : ""}
+        ${escHtml(labelOf(id))}
+        ${canMove && i < members.length - 1 ? `<button type="button" class="tree-pill-mv" data-role="${roleKey}" data-id="${escHtml(id)}" data-dir="1" title="Move later">›</button>` : ""}
+        <button class="tree-pill-rm" data-role="${roleKey}" data-id="${escHtml(id)}" title="Remove">✕</button>
       </span>`).join("");
     // links that only exist in another profile's tree: shown, but edited over there
     const inheritedPills = (inh[roleKey] || [])
-      .filter(x => !members.some(m => normName(m) === normName(x.name)))
+      .filter(x => !members.includes(x.id))
       .map(x => `
       <span class="tree-pill tree-pill--inherited" title="Comes from ${escHtml(x.from.name)}'s tree — edit it there">
-        ${escHtml(x.name)}
+        ${escHtml(labelOf(x.id))}
         <a class="tree-pill-src" href="character.html?id=${escHtml(x.from.id)}" title="Open ${escHtml(x.from.name)}">↗</a>
       </span>`).join("");
 
@@ -1313,21 +1519,19 @@ function showNodeEditSidebar(charId, nodeName) {
         <div class="tree-add-row">
           <input type="text" class="tree-add-input" id="add-input-${roleKey}"
             placeholder="Add name…" list="tree-suggestions-${roleKey}" autocomplete="off"/>
-          <datalist id="tree-suggestions-${roleKey}">
-            ${suggestions.map(s => `<option value="${escHtml(s)}">`).join("")}
-          </datalist>
+          <datalist id="tree-suggestions-${roleKey}">${optionsHtml}</datalist>
           <button class="tree-add-btn" data-role="${roleKey}">+</button>
         </div>
       </div>`;
   }
 
-  const isNodeOnTree = !!eff.map[nodeName];
-  const isFocal = nodeName === character.name;
+  const isNodeOnTree = !!eff.map[nodeId];
+  const isFocal = nodeId === character.id;
 
   wrap.innerHTML = `
     <div class="tree-sidebar tree-sidebar--edit">
       <div class="tree-sb-header">
-        <span class="tree-sb-node-name">${escHtml(nodeName)}</span>
+        <span class="tree-sb-node-name">${escHtml(nodeChar ? (nodeChar.name || "Unnamed") : "(deleted character)")}</span>
         <button class="tree-sb-back" id="tree-sb-back" title="Back">←</button>
       </div>
       ${roleSection("parents",  "Parents",  "tree-sb-role--parent")}
@@ -1344,25 +1548,25 @@ function showNodeEditSidebar(charId, nodeName) {
   wrap.querySelectorAll(".tree-pill-rm").forEach(btn => {
     btn.addEventListener("click", async () => {
       const role = btn.dataset.role;
-      const name = btn.dataset.name;
+      const otherId = btn.dataset.id;
       const chars2   = getCharacters();
       const char2    = chars2.find(c => c.id === charId);
       const map2     = getTreeMap(char2);
-      if (!map2[nodeName]) return;
-      map2[nodeName][role] = map2[nodeName][role].filter(n => n !== name);
+      if (!map2[nodeId]) return;
+      map2[nodeId][role] = map2[nodeId][role].filter(n => n !== otherId);
 
       // FIX 4: also remove the reverse reference
-      if (map2[name]) {
-        if (role === "parents")  map2[name].children = map2[name].children.filter(n => n !== nodeName);
-        if (role === "children") map2[name].parents  = map2[name].parents.filter(n => n !== nodeName);
-        if (role === "partners") map2[name].partners = map2[name].partners.filter(n => n !== nodeName);
+      if (map2[otherId]) {
+        if (role === "parents")  map2[otherId].children = map2[otherId].children.filter(n => n !== nodeId);
+        if (role === "children") map2[otherId].parents  = map2[otherId].parents.filter(n => n !== nodeId);
+        if (role === "partners") map2[otherId].partners = map2[otherId].partners.filter(n => n !== nodeId);
       }
 
       // FIX 4: prune empty non-focal nodes
-      pruneTreeMap(map2, char2.name);
+      pruneTreeMap(map2, char2.id);
 
       await saveTreeMap(charId, map2);
-      showNodeEditSidebar(charId, nodeName);
+      showNodeEditSidebar(charId, nodeId);
       redrawTree(charId);
     });
   });
@@ -1370,24 +1574,24 @@ function showNodeEditSidebar(charId, nodeName) {
   wrap.querySelectorAll(".tree-pill-mv").forEach(btn => {
     btn.addEventListener("click", async () => {
       const role = btn.dataset.role;
-      const name = btn.dataset.name;
+      const moveId = btn.dataset.id;
       const dir  = parseInt(btn.dataset.dir, 10);
       const char2 = getCharacters().find(c => c.id === charId);
       const map2  = getTreeMap(char2);
-      const list  = map2[nodeName]?.[role];
+      const list  = map2[nodeId]?.[role];
       if (!list) return;
-      const i = list.indexOf(name), j = i + dir;
+      const i = list.indexOf(moveId), j = i + dir;
       if (i < 0 || j < 0 || j >= list.length) return;
       const other = list[j];
       const swapIn = arr => {
-        const a = arr.indexOf(name), b = arr.indexOf(other);
-        if (a >= 0 && b >= 0) { arr[a] = other; arr[b] = name; }
+        const a = arr.indexOf(moveId), b = arr.indexOf(other);
+        if (a >= 0 && b >= 0) { arr[a] = other; arr[b] = moveId; }
       };
       // siblings share their order across all of their parents' lists
       if (role === "children") Object.values(map2).forEach(nd => swapIn(nd.children));
       else swapIn(list);
       await saveTreeMap(charId, map2);
-      showNodeEditSidebar(charId, nodeName);
+      showNodeEditSidebar(charId, nodeId);
       redrawTree(charId);
     });
   });
@@ -1396,24 +1600,46 @@ function showNodeEditSidebar(charId, nodeName) {
     btn.addEventListener("click", async () => {
       const role  = btn.dataset.role;
       const input = document.getElementById(`add-input-${role}`);
-      const name  = (input?.value || "").trim();
-      if (!name) return;
+      const text  = (input?.value || "").trim();
+      if (!text) return;
       const chars2 = getCharacters();
       const char2  = chars2.find(c => c.id === charId);
       const map2   = getTreeMap(char2);
-      if (!map2[nodeName]) map2[nodeName] = { parents: [], partners: [], children: [] };
-      if (!map2[nodeName][role].includes(name)) {
-        map2[nodeName][role].push(name);
+
+      // Resolve what was typed to an existing character (by id), or offer to create a mini profile.
+      const found = findPeople(chars2, text);
+      let targetId;
+      if (found.length > 1) {
+        alert(`More than one character is called "${text}". Pick one from the suggestions (the entries with the fandom in brackets).`);
+        return;
+      }
+      if (found.length === 1) {
+        targetId = found[0].id;
+      } else {
+        if (!confirm(`"${text}" isn't an existing character. Create a mini profile for them?`)) return;
+        const mini = makeMini(text, char2);
+        chars2.push(mini);
+        targetId = mini.id;
+      }
+      if (targetId === nodeId) {
+        alert("A person can't be their own parent, partner or child.");
+        return;
+      }
+
+      if (!map2[nodeId]) map2[nodeId] = { parents: [], partners: [], children: [] };
+      if (!map2[nodeId][role].includes(targetId)) {
+        map2[nodeId][role].push(targetId);
       }
       // Add reverse reference so the other node also appears in the map
-      if (!map2[name]) map2[name] = { parents: [], partners: [], children: [] };
-      if (role === "parents"  && !map2[name].children.includes(nodeName)) map2[name].children.push(nodeName);
-      if (role === "children" && !map2[name].parents.includes(nodeName))  map2[name].parents.push(nodeName);
-      if (role === "partners" && !map2[name].partners.includes(nodeName)) map2[name].partners.push(nodeName);
+      if (!map2[targetId]) map2[targetId] = { parents: [], partners: [], children: [] };
+      if (role === "parents"  && !map2[targetId].children.includes(nodeId)) map2[targetId].children.push(nodeId);
+      if (role === "children" && !map2[targetId].parents.includes(nodeId))  map2[targetId].parents.push(nodeId);
+      if (role === "partners" && !map2[targetId].partners.includes(nodeId)) map2[targetId].partners.push(nodeId);
 
-      await saveTreeMap(charId, map2);
+      char2.treeData = map2;
+      await saveCharacters(chars2);
       if (input) input.value = "";
-      showNodeEditSidebar(charId, nodeName);
+      showNodeEditSidebar(charId, nodeId);
       redrawTree(charId);
     });
   });
@@ -1733,7 +1959,7 @@ function redrawTree(charId) {
 
   const eff      = buildEffectiveTree(character, chars);
   const map      = eff.map;
-  const focalKey = character.name;
+  const focalKey = character.id;
   const R        = T.NODE_R;
   const get      = n => map[n] || { parents: [], partners: [], children: [] };
   const { pos, gen, unitOf } = layoutFamilyTree(map, focalKey);
@@ -1747,23 +1973,24 @@ function redrawTree(charId) {
   let nodes_ = ``;
   let hasArc = false;
 
-  const sameName = (a, b) => (a || "").toLowerCase().trim() === (b || "").toLowerCase().trim();
-  function getImg(name) {
-    const m = chars.find(c => sameName(c.name, name));
+  const nameOf = id => (chars.find(c => c.id === id) || {}).name || "Unnamed";
+  function getImg(id) {
+    const m = chars.find(c => c.id === id);
     return m ? (m.titleImage || m.refImage || "") : "";
   }
-  function getHref(name) {
-    const m = chars.find(c => c.id !== charId && sameName(c.name, name));
+  function getHref(id) {
+    const m = chars.find(c => c.id === id && c.id !== charId);
     return m && !m.mini ? `character.html?id=${m.id}` : "";
   }
 
-  function drawNode(name, x, y, isFocal) {
+  function drawNode(nodeId, x, y, isFocal) {
+    const name   = nameOf(nodeId);
     const r      = isFocal ? R + 4 : R;
     const cid    = mkCid();
-    const img    = getImg(name);
-    const href   = getHref(name);
+    const img    = getImg(nodeId);
+    const href   = getHref(nodeId);
     const init   = (name[0] || "?").toUpperCase();
-    const via    = eff.via[name];
+    const via    = eff.via[nodeId];
     const lines  = wrapTreeLabel(name, T.LABEL_MAX);
 
     defs += `<clipPath id="${cid}"><circle cx="${x}" cy="${y}" r="${r}"/></clipPath>`;
@@ -1780,9 +2007,9 @@ function redrawTree(charId) {
                          : `stroke="var(--border)" stroke-width="1.5"`;
     const clickable  = _treeEditMode || href || !isFocal;
     const cursor     = clickable ? `style="cursor:pointer"` : "";
-    const dataEdit   = _treeEditMode ? `data-editnode="${escHtml(name)}"` : "";
+    const dataEdit   = _treeEditMode ? `data-editnode="${escHtml(nodeId)}"` : "";
     const dataHref   = (!_treeEditMode && href) ? `data-href="${escHtml(href)}"` : "";
-    const dataPerson = (!_treeEditMode && !href && !isFocal) ? `data-person="${escHtml(name)}"` : "";
+    const dataPerson = (!_treeEditMode && !href && !isFocal) ? `data-person-id="${escHtml(nodeId)}"` : "";
     const tip        = via ? `<title>${escHtml(name)} — from ${escHtml(via.name)}'s tree</title>` : "";
 
     const badge = _treeEditMode ? `
@@ -1991,16 +2218,17 @@ function renderRelationships(relationships, currentId) {
 
   const allChars = getCharacters();
   const cards = relationships.map(rel => {
-    const match = allChars.find(c =>
-      c.id !== currentId &&
-      (c.name || "").toLowerCase().trim() === (rel.name || "").toLowerCase().trim()
-    );
-    // A full profile links to its page; anyone else (mini profile or not on the site yet) opens a mini profile popup.
+    // Links are by id; the name shown is the character's current name.
+    const match = rel.charId && rel.charId !== currentId ? allChars.find(c => c.id === rel.charId) : null;
+    // A full profile links to its page; a mini profile opens a popup; an unlinked row is plain text.
     const full = match && !match.mini ? match : null;
-    const pName = escHtml(rel.name || "Unknown");
+    const shown = match ? (match.name || "Unnamed") : (rel.name || "Unknown");
+    const pName = escHtml(shown);
     const nameHtml = (full
       ? `<a href="character.html?id=${escHtml(full.id)}" class="rel-name rel-name-link">${pName}</a>`
-      : `<a href="#" class="rel-name rel-name-link" data-person="${escHtml(rel.name || "")}">${pName}</a>`)
+      : match
+        ? `<a href="#" class="rel-name rel-name-link" data-person-id="${escHtml(match.id)}">${pName}</a>`
+        : `<span class="rel-name">${pName}</span>`)
       + (!full && rel.link ? `<a href="${escHtml(rel.link)}" class="rel-ext-link" target="_blank" rel="noopener" title="Open link">↗</a>` : "");
     const canonLabel = rel.canon === "canon"
       ? `<span class="rel-canon rel-canon--yes">canon</span>`
@@ -2028,10 +2256,12 @@ function renderRelationships(relationships, currentId) {
     }
     const avatarImg = match && (match.titleImage || match.refImage)
       ? `<img src="${escHtml(match.titleImage || match.refImage)}" class="rel-avatar" alt="" />`
-      : `<div class="rel-avatar rel-avatar-placeholder">${escHtml((rel.name?.[0] || "?").toUpperCase())}</div>`;
+      : `<div class="rel-avatar rel-avatar-placeholder">${escHtml((shown[0] || "?").toUpperCase())}</div>`;
     const avatarHtml = full
       ? `<a href="character.html?id=${escHtml(full.id)}" class="rel-avatar-link">${avatarImg}</a>`
-      : `<a href="#" class="rel-avatar-link" data-person="${escHtml(rel.name || "")}">${avatarImg}</a>`;
+      : match
+        ? `<a href="#" class="rel-avatar-link" data-person-id="${escHtml(match.id)}">${avatarImg}</a>`
+        : `<span class="rel-avatar-link">${avatarImg}</span>`;
     return `
       <div class="rel-card">
         <div class="rel-card-header">
@@ -2062,10 +2292,12 @@ function openRelationshipEditor(charId) {
   relEditingCharId = charId;
   const characters = getCharacters();
   const character  = characters.find(c => c.id === charId);
+  ensureDatalist("rel-name-list", peopleOptionsHtml(characters, charId));
+  const idx = buildPeopleIndex(characters);
   const tbody = document.getElementById("rel-editor-rows");
   if (tbody) {
     tbody.innerHTML = "";
-    (character?.relationships || []).forEach(rel => addRelRow(rel));
+    (character?.relationships || []).forEach(rel => addRelRow(rel, characters, idx));
   }
   overlay.classList.add("open");
   document.body.style.overflow = "hidden";
@@ -2077,16 +2309,21 @@ function closeRelationshipEditor() {
   relEditingCharId = null;
 }
 
-function addRelRow(rel) {
+function addRelRow(rel, chars, idx) {
   rel = rel || {};
+  chars = chars || getCharacters();
+  idx   = idx   || buildPeopleIndex(chars);
   const tbody = document.getElementById("rel-editor-rows");
   if (!tbody) return;
+  const person = rel.charId ? chars.find(c => c.id === rel.charId) : null;
+  const label  = person ? idx.labelOf.get(person.id) : (rel.name || "");
   const tr = document.createElement("tr");
   tr.classList.add("rel-editor-row");
-  tr.dataset.origName = rel.name || "";
+  tr.dataset.charId    = person ? person.id : "";
+  tr.dataset.origLabel = label;
   tr.innerHTML = `
     <td class="rel-editor-cell rel-editor-cell--name">
-      <input type="text" class="rel-r-name" placeholder="Name" value="${escHtml(rel.name || "")}" />
+      <input type="text" class="rel-r-name" placeholder="Name" list="rel-name-list" autocomplete="off" value="${escHtml(label)}" />
     </td>
     <td class="rel-editor-cell rel-editor-cell--type">
       <input type="text" class="rel-r-type" placeholder="e.g. best friend, rival" value="${escHtml(rel.type || "")}" />
@@ -2118,6 +2355,7 @@ async function handleRelFormSubmit(e) {
   if (!charId) return;
   const rows = Array.from(document.querySelectorAll("#rel-editor-rows .rel-editor-row"));
   const all = rows.map(tr => ({
+    tr,
     name:        (tr.querySelector(".rel-r-name")?.value  || "").trim(),
     type:        (tr.querySelector(".rel-r-type")?.value  || "").trim(),
     canon:       (tr.querySelector(".rel-r-canon")?.value || ""),
@@ -2129,25 +2367,60 @@ async function handleRelFormSubmit(e) {
     alert("Every relationship needs a name — fill in the Name column (or remove the row) before saving.");
     return;
   }
-  const relationships = all.filter(r => r.name);
+  const entries = all.filter(r => r.name);
   const characters = getCharacters();
   const idx = characters.findIndex(c => c.id === charId);
   if (idx === -1) {
     alert("Couldn't find this character in storage. Try reloading the page.");
     return;
   }
-  // Renamed someone who has no full profile (a mini profile, or just a name in the tree)?
-  // Carry the new name over to their mini profile, the family tree and everyone else's references.
-  rows.forEach((tr, i) => {
-    const oldName = tr.dataset.origName || "";
-    const newName = all[i].name;
-    if (!oldName || !newName || oldName === newName) return;
-    const wasFull = characters.some(c => !c.mini && normName(c.name) === normName(oldName));
-    const clash   = characters.some(c => normName(c.name) === normName(newName) && normName(c.name) !== normName(oldName));
-    if (!wasFull && !clash) renamePersonIn(characters, oldName, newName);
+  const self = characters[idx];
+  const people = buildPeopleIndex(characters);
+
+  // Resolve each typed name to a character id.
+  const unknown = [], ambiguous = [];
+  entries.forEach(r => {
+    const prev = r.tr.dataset.charId ? characters.find(c => c.id === r.tr.dataset.charId) : null;
+    if (prev && r.name === r.tr.dataset.origLabel) { r.person = prev; return; }   // untouched row
+    const found = findPeople(characters, r.name, people);
+    if (found.length === 1) r.person = found[0];
+    else if (found.length > 1) ambiguous.push(r.name);
+    else unknown.push(r.name);
   });
-  characters[idx].relationships = relationships;
-  characters[idx].updatedAt = new Date().toISOString();
+  if (ambiguous.length) {
+    alert(`More than one character is called: ${[...new Set(ambiguous)].join(", ")}.\nPick one from the suggestions (the entries with the fandom in brackets).`);
+    return;
+  }
+  if (entries.some(r => r.person && r.person.id === charId)) {
+    alert("A character can't have a relationship with themselves.");
+    return;
+  }
+  if (unknown.length) {
+    const list = [...new Set(unknown)];
+    if (!confirm(`These names don't match any character on this site:\n\n${list.join(", ")}\n\nCreate a mini profile for each of them? (Cancel to go back and fix a typo.)`)) return;
+    const created = new Map();
+    entries.forEach(r => {
+      if (r.person) return;
+      const k = normName(r.name);
+      if (!created.has(k)) {
+        const mini = makeMini(r.name, self);
+        characters.push(mini);
+        created.set(k, mini);
+      }
+      r.person = created.get(k);
+    });
+  }
+
+  const relationships = entries.map(r => ({
+    charId:      r.person.id,
+    name:        r.person.name,      // cached for display if the character is ever deleted
+    type:        r.type,
+    canon:       r.canon,
+    link:        r.link,
+    description: r.description,
+  }));
+  self.relationships = relationships;
+  self.updatedAt = new Date().toISOString();
   // Persist first (saveCharacters writes localStorage synchronously), then touch the UI,
   // so a rendering problem can never stop the data being saved.
   const saving = saveCharacters(characters);
@@ -2249,7 +2522,7 @@ function addGalleryEditorRow(item) {
   tr.innerHTML = `
     <td><input type="text" class="g-src"        placeholder="Image URL"          value="${escHtml(item.src        || "")}" /></td>
     <td><input type="text" class="g-caption"    placeholder="Caption"            value="${escHtml(item.caption    || "")}" /></td>
-    <td><input type="text" class="g-characters" placeholder="Names, comma-sep."  value="${escHtml(item.characters || "")}" /></td>
+    <td><input type="text" class="g-characters" placeholder="Names, comma-sep." list="tag-names-list" autocomplete="off" value="${escHtml(tagsToText(item))}" /></td>
     <td><input type="text" class="g-year"       placeholder="Year" style="width:70px" value="${escHtml(item.year || "")}" /></td>
     <td><button type="button" class="rm-gallery-row">✕</button></td>
   `;
@@ -2261,6 +2534,7 @@ function openGalleryEditor(charId, addRow) {
   const overlay = document.getElementById("gallery-editor-overlay");
   if (!overlay) return;
   _galleryEditingCharId = charId;
+  ensureDatalist("tag-names-list", peopleOptionsHtml(getCharacters(), charId));
   const character = getCharacters().find(c => c.id === charId);
   const tbody = document.getElementById("gallery-editor-rows");
   if (tbody) {
@@ -2281,20 +2555,35 @@ function closeGalleryEditor() {
 async function handleGalleryFormSubmit(e) {
   e.preventDefault();
   if (!_galleryEditingCharId) return;
-  const gallery = Array.from(document.querySelectorAll("#gallery-editor-rows tr")).map(tr => ({
-    src:        (tr.querySelector(".g-src")?.value        || "").trim(),
-    caption:    (tr.querySelector(".g-caption")?.value    || "").trim(),
-    characters: (tr.querySelector(".g-characters")?.value || "").trim(),
-    year:       (tr.querySelector(".g-year")?.value       || "").trim(),
-  })).filter(g => g.src);
   const characters = getCharacters();
+  const rows = Array.from(document.querySelectorAll("#gallery-editor-rows tr")).map(tr => ({
+    src:     (tr.querySelector(".g-src")?.value        || "").trim(),
+    caption: (tr.querySelector(".g-caption")?.value    || "").trim(),
+    tags:    (tr.querySelector(".g-characters")?.value || "").trim(),
+    year:    (tr.querySelector(".g-year")?.value       || "").trim(),
+  })).filter(g => g.src);
+
+  // Tags must match characters that exist; they are stored as ids.
+  const problems = [];
+  const gallery = rows.map(g => {
+    const r = resolveTagText(g.tags, characters, _galleryEditingCharId);
+    const p = tagProblems(r);
+    if (p) problems.push(`"${g.caption || g.src}": ${p}`);
+    return { src: g.src, caption: g.caption, characterIds: r.ids, year: g.year };
+  });
+  if (problems.length) {
+    alert("Some tags don't match a character on this site:\n\n" + problems.join("\n\n"));
+    return;
+  }
+
   const idx = characters.findIndex(c => c.id === _galleryEditingCharId);
   if (idx !== -1) {
     characters[idx].gallery   = gallery;
     characters[idx].updatedAt = new Date().toISOString();
   }
+  const editedId = _galleryEditingCharId;
   closeGalleryEditor();
-  renderGallery(gallery, _galleryEditingCharId);
+  renderGallery(gallery, editedId);
   await saveCharacters(characters);
 }
 
@@ -2319,13 +2608,11 @@ function renderGallery(ownGallery, currentCharId) {
   if (!grid) return;
   const allChars    = getCharacters();
   const currentChar = allChars.find(c => c.id === currentCharId);
-  const currentName = (currentChar?.name || "").toLowerCase().trim();
   const taggedImages = [];
   allChars.forEach(c => {
     if (c.id === currentCharId) return;
     (c.gallery || []).forEach(item => {
-      const tags = (item.characters || "").split(",").map(t => t.trim().toLowerCase()).filter(Boolean);
-      if (currentName && tags.includes(currentName)) {
+      if ((item.characterIds || []).includes(currentCharId)) {
         taggedImages.push({ ...item, _fromChar: c.name });
       }
     });
@@ -2726,6 +3013,7 @@ function openEditor(id) {
   }
   const galleryBody = document.getElementById("gallery-rows");
   if (galleryBody) {
+    ensureDatalist("tag-names-list", peopleOptionsHtml(getCharacters(), id));
     galleryBody.innerHTML = "";
     (c?.gallery || []).forEach(item => addGalleryRow(item));
   }
@@ -2764,7 +3052,7 @@ function addGalleryRow(item) {
   tr.innerHTML = `
     <td><input type="text" class="g-src"        placeholder="Image URL"          value="${escHtml(item.src        || "")}" /></td>
     <td><input type="text" class="g-caption"    placeholder="Caption"            value="${escHtml(item.caption    || "")}" /></td>
-    <td><input type="text" class="g-characters" placeholder="Names, comma-sep."  value="${escHtml(item.characters || "")}" /></td>
+    <td><input type="text" class="g-characters" placeholder="Names, comma-sep." list="tag-names-list" autocomplete="off" value="${escHtml(tagsToText(item))}" /></td>
     <td><input type="text" class="g-year"       placeholder="Year" style="width:70px" value="${escHtml(item.year || "")}" /></td>
     <td><button type="button" class="rm-gallery-row">✕</button></td>
   `;
@@ -2822,14 +3110,30 @@ async function handleFormSubmit(e) {
 
     // The character-page editor has no gallery table, so keep the saved gallery when the table isn't there.
     const galleryBody = document.getElementById("gallery-rows");
-    const gallery = galleryBody
-      ? Array.from(galleryBody.querySelectorAll("tr")).map(tr => ({
-          src:        (tr.querySelector(".g-src")?.value        || "").trim(),
-          caption:    (tr.querySelector(".g-caption")?.value    || "").trim(),
-          characters: (tr.querySelector(".g-characters")?.value || "").trim(),
-          year:       (tr.querySelector(".g-year")?.value       || "").trim(),
-        })).filter(g => g.src)
-      : (existingChar?.gallery || []);
+    let gallery = existingChar?.gallery || [];
+    if (galleryBody) {
+      const rows = Array.from(galleryBody.querySelectorAll("tr")).map(tr => ({
+        src:     (tr.querySelector(".g-src")?.value        || "").trim(),
+        caption: (tr.querySelector(".g-caption")?.value    || "").trim(),
+        tags:    (tr.querySelector(".g-characters")?.value || "").trim(),
+        year:    (tr.querySelector(".g-year")?.value       || "").trim(),
+      })).filter(g => g.src);
+      // Tags must match characters that exist; they are stored as ids.
+      const allChars = getCharacters();
+      const problems = [];
+      gallery = rows.map(g => {
+        const r = resolveTagText(g.tags, allChars, editingId);
+        const p = tagProblems(r);
+        if (p) problems.push(`"${g.caption || g.src}": ${p}`);
+        return { src: g.src, caption: g.caption, characterIds: r.ids, year: g.year };
+      });
+      if (problems.length) {
+        alert("Some tags don't match a character on this site:\n\n" + problems.join("\n\n"));
+        _savingCharacter = false;
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = "Save Character"; }
+        return;
+      }
+    }
 
     const customLinks = Array.from(document.querySelectorAll("#custom-link-rows tr")).map(tr => ({
       title: (tr.querySelector(".cl-title")?.value || "").trim(),
@@ -2850,6 +3154,7 @@ async function handleFormSubmit(e) {
       // (stories, relationships, treeData, details, createdAt, …) is kept.
       ...(existingChar || {}),
       id:            editingId || generateId(),
+      idLinks:       existingChar ? existingChar.idLinks : true,
       updatedAt:     now,
       name,
       fandom,
@@ -2916,7 +3221,11 @@ async function handleFormSubmit(e) {
 
 async function deleteCharacter(id) {
   if (!confirm("Delete this character? This cannot be undone.")) return;
-  const characters = getCharacters().filter(c => c.id !== id);
+  const all  = getCharacters();
+  const gone = all.find(c => c.id === id);
+  const characters = all.filter(c => c.id !== id);
+  // Nothing may keep pointing at the deleted id (trees, tags, relationships).
+  purgeCharId(characters, id, gone?.name);
   closeEditor();
   // Wait for the GitHub write to finish BEFORE navigating away. Otherwise the page
   // unloads mid-request, the Gist keeps the old list, and the next index load
@@ -2936,10 +3245,6 @@ async function deleteCharacter(id) {
 // STORIES
 // ══════════════════════════════════════════════════════════════════════
 
-function splitTags(str) {
-  return (str || "").split(",").map(t => t.trim().toLowerCase()).filter(Boolean);
-}
-
 function renderStories(charId) {
   const panel = document.getElementById("panel-stories");
   if (!panel) return;
@@ -2950,11 +3255,11 @@ function renderStories(charId) {
   const items = (character?.stories || []).map(story => ({ story, ownerId: charId, ownerName: "" }));
 
   // Stories on other characters' pages that tag this character
-  if (myName) {
+  if (character) {
     all.forEach(c => {
       if (c.id === charId) return;
       (c.stories || []).forEach(story => {
-        if (splitTags(story.characters).includes(myName)) {
+        if ((story.characterIds || []).includes(charId)) {
           items.push({ story, ownerId: c.id, ownerName: c.name || "Unnamed" });
         }
       });
@@ -3017,16 +3322,12 @@ function openStoryReader(charId, storyId) {
     if (character && charId !== pageId) {
       parts.push(`From <a href="character.html?id=${escHtml(character.id)}">${escHtml(character.name || "Unnamed")}</a>'s stories`);
     }
-    const tagNames = (story.characters || "").split(",").map(t => t.trim()).filter(Boolean);
-    if (tagNames.length) {
-      const links = tagNames.map(n => {
-        const m = allChars.find(c => (c.name || "").toLowerCase().trim() === n.toLowerCase());
-        return m && m.id !== pageId
-          ? `<a href="character.html?id=${escHtml(m.id)}">${escHtml(n)}</a>`
-          : escHtml(n);
-      });
-      parts.push(`Featuring ${links.join(", ")}`);
-    }
+    const tagged = (story.characterIds || []).map(id => allChars.find(c => c.id === id)).filter(Boolean).map(m =>
+      m.id !== pageId && !m.mini
+        ? `<a href="character.html?id=${escHtml(m.id)}">${escHtml(m.name || "Unnamed")}</a>`
+        : escHtml(m.name || "Unnamed"));
+    const featuring = [...tagged, ...(story.unresolvedTags || []).map(escHtml)];
+    if (featuring.length) parts.push(`Featuring ${featuring.join(", ")}`);
     metaEl.innerHTML = parts.join(" · ");
   }
 
@@ -3065,13 +3366,8 @@ function openStoryEditor(charId, storyId) {
   document.getElementById("sef-subtitle").value = story?.subtitle || "";
   document.getElementById("sef-body").value     = story?.body     || "";
   const tagInput = document.getElementById("sef-characters");
-  if (tagInput) tagInput.value = story?.characters || "";
-  const tagList = document.getElementById("sef-characters-list");
-  if (tagList) {
-    tagList.innerHTML = getCharacters()
-      .filter(c => c.id !== charId && c.name)
-      .map(c => `<option value="${escHtml(c.name)}">`).join("");
-  }
+  if (tagInput) tagInput.value = tagsToText(story);
+  ensureDatalist("sef-characters-list", peopleOptionsHtml(getCharacters(), charId));
 
   const deleteBtn = document.getElementById("story-editor-delete-btn");
   if (deleteBtn) deleteBtn.style.display = storyId ? "" : "none";
@@ -3096,12 +3392,16 @@ async function handleStoryFormSubmit(e) {
   const title    = (document.getElementById("sef-title")?.value    || "").trim();
   const subtitle = (document.getElementById("sef-subtitle")?.value || "").trim();
   const body     = (document.getElementById("sef-body")?.value     || "").trim();
-  const tagged   = (document.getElementById("sef-characters")?.value || "")
-    .split(",").map(t => t.trim()).filter(Boolean).join(", ");
+  const taggedText = document.getElementById("sef-characters")?.value || "";
 
   if (!title) { alert("Please give your story a title."); return; }
 
   const characters = getCharacters();
+  // Tags must match characters that exist; they are stored as ids.
+  const tagResult = resolveTagText(taggedText, characters, _storyEditingCharId);
+  const tagProblem = tagProblems(tagResult);
+  if (tagProblem) { alert("Some tags don't match a character on this site:\n\n" + tagProblem); return; }
+  const tagIds = tagResult.ids;
   const idx = characters.findIndex(c => c.id === _storyEditingCharId);
   if (idx === -1) return;
 
@@ -3111,10 +3411,10 @@ async function handleStoryFormSubmit(e) {
   if (_storyEditingStoryId) {
     const sIdx = characters[idx].stories.findIndex(s => s.id === _storyEditingStoryId);
     if (sIdx !== -1) {
-      characters[idx].stories[sIdx] = { ...characters[idx].stories[sIdx], title, subtitle, body, characters: tagged, updatedAt: now };
+      characters[idx].stories[sIdx] = { ...characters[idx].stories[sIdx], title, subtitle, body, characterIds: tagIds, unresolvedTags: [], updatedAt: now };
     }
   } else {
-    characters[idx].stories.push({ id: generateId(), title, subtitle, body, characters: tagged, createdAt: now, updatedAt: now });
+    characters[idx].stories.push({ id: generateId(), title, subtitle, body, characterIds: tagIds, createdAt: now, updatedAt: now });
   }
   characters[idx].updatedAt = now;
 
@@ -3139,48 +3439,6 @@ async function deleteStory(charId, storyId) {
 }
 
 
-// ── Renaming a person everywhere ─────────────────────────────────────
-// People are linked by name (relationships, family trees, gallery/story tags), so when
-// a name changes we rewrite it in every character, and rename the mini profile itself.
-function normName(n) { return (n || "").toLowerCase().trim(); }
-
-function renameInCsv(csv, oldKey, newName) {
-  if (!csv) return csv;
-  return csv.split(",").map(t => normName(t) === oldKey ? newName : t.trim()).filter(Boolean).join(", ");
-}
-
-function renamePersonIn(chars, oldName, newName) {
-  const o = normName(oldName);
-  const n = (newName || "").trim();
-  if (!o || !n) return;
-  const map = x => (normName(x) === o ? n : x);
-  const uniq = arr => [...new Set(arr)];
-  chars.forEach(c => {
-    if (c.mini && normName(c.name) === o) c.name = n;
-    (c.relationships || []).forEach(r => { if (normName(r.name) === o) r.name = n; });
-    (c.gallery  || []).forEach(g => { g.characters = renameInCsv(g.characters, o, n); });
-    (c.stories  || []).forEach(st => { st.characters = renameInCsv(st.characters, o, n); });
-    if (c.treeData && typeof c.treeData === "object") {
-      const out = {};
-      Object.entries(c.treeData).forEach(([k, v]) => {
-        if (!v || typeof v !== "object" || Array.isArray(v)) return;
-        const nk = map(k);
-        const node = {
-          parents:  uniq((v.parents  || []).map(map)),
-          partners: uniq((v.partners || []).map(map)),
-          children: uniq((v.children || []).map(map)),
-        };
-        if (out[nk]) {
-          ["parents", "partners", "children"].forEach(r => { out[nk][r] = uniq([...out[nk][r], ...node[r]]); });
-        } else {
-          out[nk] = node;
-        }
-      });
-      c.treeData = out;
-    }
-  });
-}
-
 // ══════════════════════════════════════════════════════════════════════
 // MINI PROFILES
 // A mini profile is a lightweight character (flag: mini = true). It is hidden from
@@ -3191,25 +3449,23 @@ function renamePersonIn(chars, oldName, newName) {
 let _mini = null; // { id, fromId, name }
 
 function wirePersonLinks(root, fromCharId) {
-  root.querySelectorAll("[data-person]").forEach(el => {
+  root.querySelectorAll("[data-person-id]").forEach(el => {
     el.addEventListener("click", e => {
       e.preventDefault();
       e.stopPropagation();
-      openPersonByName(el.getAttribute("data-person"), fromCharId);
+      openPersonById(el.getAttribute("data-person-id"), fromCharId);
     });
   });
 }
 
-function openPersonByName(name, fromCharId) {
-  const key = (name || "").toLowerCase().trim();
-  if (!key) return;
-  const match = getCharacters().find(c =>
-    c.id !== fromCharId && (c.name || "").toLowerCase().trim() === key);
-  if (match && !match.mini) {
-    window.location.href = `character.html?id=${encodeURIComponent(match.id)}`;
+function openPersonById(id, fromCharId) {
+  const c = getCharacters().find(x => x.id === id);
+  if (!c) return;
+  if (!c.mini) {
+    window.location.href = `character.html?id=${encodeURIComponent(c.id)}`;
     return;
   }
-  openMiniProfile(match ? match.id : null, name, fromCharId);
+  openMiniProfile(c.id, c.name, fromCharId);
 }
 
 function ensureMiniModal() {
@@ -3347,34 +3603,19 @@ function refreshPersonViews() {
 
 async function saveMiniProfile(e) {
   e.preventDefault();
-  if (!_mini) return;
+  if (!_mini?.id) return;
   const val = id => (document.getElementById(id)?.value || "").trim();
   const name = val("mf-name");
   if (!name) { alert("This mini profile needs a name."); return; }
 
   const chars = getCharacters();
   const now = new Date().toISOString();
-  let c = _mini.id ? chars.find(x => x.id === _mini.id) : null;
+  const c = chars.find(x => x.id === _mini.id);
+  if (!c) { alert("Couldn't find this mini profile any more. Try reloading the page."); return; }
 
-  // Name changed? Make sure it doesn't collide, then rename it everywhere it's referenced.
-  const oldName = c ? c.name : _mini.name;
-  if (name !== oldName) {
-    const clash = chars.find(x => (!c || x.id !== c.id) && normName(x.name) === normName(name));
-    if (clash) { alert(`Someone called "${clash.name}" already exists — pick a different name.`); return; }
-    renamePersonIn(chars, oldName, name);
-    _mini.name = name;
-  }
-  if (!c) {
-    const from = chars.find(x => x.id === _mini.fromId);
-    c = {
-      id: generateId(), mini: true, createdAt: now, name,
-      fandom: from?.fandom || "", pronouns: "", heritage: "", appearance: "",
-      background: "", history: "", refImage: "", refImages: [],
-      links: {}, customLinks: [], gallery: [], otherArt: [],
-      relationships: [], treeData: {}, details: [], stories: [],
-    };
-    chars.push(c);
-  }
+  // Links are by id, so a rename only changes the display name — nothing else to patch.
+  c.name = name;
+  _mini.name = name;
   Object.assign(c, {
     titleImage: val("mf-pic"),
     nicknames:  val("mf-nick"),
@@ -3388,7 +3629,6 @@ async function saveMiniProfile(e) {
   const fullName = val("mf-full");
   c.details = (c.details || []).filter(d => d.key !== "fullName");
   if (fullName) c.details.unshift({ key: "fullName", label: "Full Legal Name", value: fullName });
-  _mini.id = c.id;
 
   const saving = saveCharacters(chars);
   showMiniView(c);
@@ -3399,8 +3639,11 @@ async function saveMiniProfile(e) {
 
 async function deleteMiniProfile() {
   if (!_mini?.id) return;
-  if (!confirm("Delete this mini profile? Their name stays in the tree and relationships, but the profile details are lost.")) return;
-  const chars = getCharacters().filter(c => c.id !== _mini.id);
+  if (!confirm("Delete this mini profile? Relationships that point to them stay as plain names; they're removed from family trees and tags.")) return;
+  const all  = getCharacters();
+  const gone = all.find(c => c.id === _mini.id);
+  const chars = all.filter(c => c.id !== _mini.id);
+  purgeCharId(chars, _mini.id, gone?.name);
   const saving = saveCharacters(chars);
   closeMiniProfile();
   refreshPersonViews();
@@ -3430,6 +3673,7 @@ document.addEventListener("DOMContentLoaded", function () {
     clearTimeout(_rsT);
     _rsT = setTimeout(() => document.querySelectorAll(".gallery-grid").forEach(layoutMasonry), 150);
   });
+  ensureMigrated();
   loadIndexPage();
   loadCharacterPage();
   wireBackupUI();
