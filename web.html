@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <script>try { var t = localStorage.getItem('oc_theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); document.documentElement.dataset.theme = t; } catch (e) { }</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Relationship Web — June's Character Storage</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600&family=DM+Sans:wght@300;400;500&display=swap"
+    rel="stylesheet" />
+
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="stats.css" />
+  <link rel="stylesheet" href="features.css" />
+  <link rel="stylesheet" href="web.css" />
+</head>
+
+<body>
+
+  <nav>
+    <a href="index.html" class="nav-logo">June's Character Storage</a>
+    <div class="nav-right">
+      <a href="stats.html" class="nav-stats-btn" title="Statistics">📊<span class="nav-label"> Stats</span></a>
+      <a href="index.html" class="nav-stats-btn">←<span class="nav-label"> Back to characters</span></a>
+      <span id="sync-status" class="sync-status" title=""></span>
+    </div>
+  </nav>
+
+  <main class="stats-wrap web-wrap">
+    <header class="stats-header">
+      <h1 class="stats-title">Relationship Web</h1>
+      <p class="stats-sub">Every relationship you've written down, as one big map. Mini profiles are included as dashed circles.</p>
+    </header>
+
+    <div id="web-root"></div>
+  </main>
+
+  <footer>
+    <span class="footer-logo">June's Character Storage</span>
+    <span class="footer-copy">© 2026 — All rights reserved</span>
+  </footer>
+
+  <script src="script.js"></script>
+  <script src="features.js"></script>
+  <script src="web.js"></script>
+</body>
+
+</html>

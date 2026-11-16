@@ -3,6 +3,7 @@
 
 <head>
   <meta charset="UTF-8" />
+  <script>try { var t = localStorage.getItem('oc_theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); document.documentElement.dataset.theme = t; } catch (e) { }</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Character Sheet</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -11,6 +12,7 @@
     href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400&family=DM+Sans:ital,wght@0,400;0,600;1,400&display=swap"
     rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="features.css" />
   <style>
     .page {
       padding: 2.5rem 3rem;
@@ -433,6 +435,7 @@
   <nav class="char-nav">
     <a href="index.html" class="char-nav-back">Back</a>
     <button id="char-page-edit-btn" class="char-nav-edit-btn">Edit</button>
+    <button id="char-print-btn" class="char-nav-edit-btn" title="Print or save as PDF">🖨<span class="btn-label"> Print</span></button>
     <div class="char-nav-tabs">
       <a href="#info" class="char-nav-tab active">Info</a>
       <a href="#gallery" class="char-nav-tab">Gallery</a>
@@ -852,6 +855,7 @@
   </div>
 
   <script src="script.js"></script>
+  <script src="features.js"></script>
   <script>
     document.getElementById("rel-editor-cancel")
       ?.addEventListener("click", () => closeRelationshipEditor());

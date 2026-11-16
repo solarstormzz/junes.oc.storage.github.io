@@ -2889,6 +2889,51 @@ async function loadIndexPage() {
 // CAROUSEL-STYLE INDEX SECTIONS
 // ══════════════════════════════════════════════════════════════════════
 
+// ── Search ────────────────────────────────────────────────────────────
+// Lower-cases and strips accents, so "rene" finds "René".
+function foldText(s) {
+  return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+// Everything about a character that search should look at, in priority order.
+function searchFields(c) {
+  const out = [{ label: "name", text: c.name || "" }];
+  if (c.nicknames) out.push({ label: "nickname", text: c.nicknames });
+  const fromDetails = (keys, label) => (c.details || []).forEach(d => {
+    const k = (d.key || "").toLowerCase(), l = (d.label || "").toLowerCase();
+    if (keys.includes(k) || keys.includes(l)) out.push({ label, text: d.value || "" });
+  });
+  fromDetails(["nickname", "nicknames"], "nickname");
+  fromDetails(["alias", "aliases"], "alias");
+  fromDetails(["fullname", "full legal name", "full name"], "full name");
+  out.push(
+    { label: "fandom",     text: c.fandom || "" },
+    { label: "occupation", text: c.occupation || "" },
+    { label: "heritage",   text: c.heritage || "" },
+  );
+  return out.filter(f => String(f.text).trim());
+}
+
+// null = no match. Otherwise { hint } where hint is null for plain name/fandom matches,
+// or { label, text } (e.g. nickname: "Lu") to show on the card.
+// Several words can match different fields ("rose tolkien").
+function searchMatch(c, query) {
+  const tokens = foldText(query).split(/\s+/).filter(Boolean);
+  if (!tokens.length) return { hint: null };
+  const fields = searchFields(c).map(f => ({ ...f, folded: foldText(f.text) }));
+  let hint = null;
+  for (const t of tokens) {
+    const f = fields.find(x => x.folded.includes(t));
+    if (!f) return null;
+    if (!hint && f.label !== "name" && f.label !== "fandom") {
+      const parts = String(f.text).split(/[,;\/]/).map(s => s.trim()).filter(Boolean);
+      const part  = parts.find(p => foldText(p).includes(t)) || String(f.text).trim();
+      hint = { label: f.label, text: part.length > 40 ? part.slice(0, 38) + "…" : part };
+    }
+  }
+  return { hint };
+}
+
 function renderIndexSections(container, filter) {
   filter = filter || "";
   let characters = getCharacters().filter(c => !c.mini);
@@ -2897,11 +2942,16 @@ function renderIndexSections(container, filter) {
     const n = characters.length;
     totalBadge.textContent = `${n} character${n !== 1 ? "s" : ""}`;
   }
+  // Search looks at names, nicknames, aliases, full names, fandom, occupation and heritage.
+  // `matches` remembers *why* a card matched so non-name matches get a small hint.
+  let matches = null;
   if (filter) {
-    characters = characters.filter(c =>
-      (c.name   || "").toLowerCase().includes(filter) ||
-      (c.fandom || "").toLowerCase().includes(filter)
-    );
+    matches = new Map();
+    characters = characters.filter(c => {
+      const m = searchMatch(c, filter);
+      if (m) matches.set(c.id, m.hint);
+      return !!m;
+    });
   }
   if (!characters.length) {
     container.innerHTML = `<p class="empty-state" style="padding:1rem 0">${filter ? "No characters match your search." : "No characters yet. Add one!"}</p>`;
@@ -2948,6 +2998,18 @@ function renderIndexSections(container, filter) {
     </section>`).join("");
 
   container.innerHTML = html;
+
+  if (matches) {
+    container.querySelectorAll(".char-card").forEach(card => {
+      const hint = matches.get(card.dataset.id);
+      const body = card.querySelector(".char-card-body");
+      if (!hint || !body) return;
+      const p = document.createElement("p");
+      p.className = "char-card-match";
+      p.textContent = `${hint.label}: ${hint.text}`;
+      body.appendChild(p);
+    });
+  }
 
   container.querySelectorAll(".carousel-btn").forEach(btn => {
     btn.addEventListener("click", () => {

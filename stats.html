@@ -3,6 +3,7 @@
 
 <head>
   <meta charset="UTF-8" />
+  <script>try { var t = localStorage.getItem('oc_theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); document.documentElement.dataset.theme = t; } catch (e) { }</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Statistics — June's Character Storage</title>
 
@@ -14,6 +15,7 @@
 
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="stats.css" />
+  <link rel="stylesheet" href="features.css" />
 </head>
 
 <body>
@@ -21,7 +23,8 @@
   <nav>
     <a href="index.html" class="nav-logo">June's Character Storage</a>
     <div class="nav-right">
-      <a href="index.html" class="nav-stats-btn">← Back to characters</a>
+      <a href="web.html" class="nav-stats-btn" title="Relationship web">🕸<span class="nav-label"> Web</span></a>
+      <a href="index.html" class="nav-stats-btn">←<span class="nav-label"> Back to characters</span></a>
       <span id="sync-status" class="sync-status" title=""></span>
     </div>
   </nav>
@@ -44,6 +47,7 @@
 
   <!-- script.js provides getCharacters(), loadFromGist(), escHtml() etc. -->
   <script src="script.js"></script>
+  <script src="features.js"></script>
   <script src="stats.js"></script>
 </body>
 

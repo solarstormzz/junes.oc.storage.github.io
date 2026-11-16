@@ -3,6 +3,7 @@
 
 <head>
   <meta charset="UTF-8" />
+  <script>try { var t = localStorage.getItem('oc_theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); document.documentElement.dataset.theme = t; } catch (e) { }</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>June's Character Storage</title>
 
@@ -14,6 +15,7 @@
 
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="stats.css" />
+  <link rel="stylesheet" href="features.css" />
 </head>
 
 <body>
@@ -29,7 +31,8 @@
         </svg>
         <input class="search-input" type="search" placeholder="Search…" id="search-input" />
       </div>
-      <a href="stats.html" class="nav-stats-btn" title="Statistics">📊 Stats</a>
+      <a href="web.html" class="nav-stats-btn" title="Relationship web">🕸<span class="nav-label"> Web</span></a>
+      <a href="stats.html" class="nav-stats-btn" title="Statistics">📊<span class="nav-label"> Stats</span></a>
       <button id="nav-add-btn" class="nav-add-btn" title="New Character">＋</button>
       <button id="nav-settings-btn" class="nav-settings-btn" title="GitHub Sync Settings">⚙</button>
       <span id="sync-status" class="sync-status" title=""></span>
@@ -250,6 +253,7 @@
   </div>
 
   <script src="script.js"></script>
+  <script src="features.js"></script>
 </body>
 
 </html>
