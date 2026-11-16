@@ -350,3 +350,23 @@ html[data-theme="dark"] .img-loading {
 #print-sheet li .ps-sub { color: #6b6560; font-style: italic; }
 #print-sheet li .ps-desc { color: #3b3732; }
 #print-sheet .ps-foot { margin-top: 18pt; padding-top: 4pt; border-top: 0.75pt solid #e1dcd2; font-size: 8pt; color: #9e9890; }
+
+/* ══════════════════════════════════════════
+   WORD COUNTERS
+══════════════════════════════════════════ */
+.word-count {
+  margin-top: 0.3rem;
+  text-align: right;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  color: var(--ink-light);
+  font-variant-numeric: tabular-nums;
+}
+.word-count--reader {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0.55rem 1.75rem;
+  border-top: 1px solid var(--border);
+  background: var(--card);
+}

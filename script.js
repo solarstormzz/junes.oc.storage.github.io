@@ -1489,28 +1489,34 @@ function showNodeEditSidebar(charId, nodeId) {
   const idx      = buildPeopleIndex(chars);
   const labelOf  = id => idx.labelOf.get(id) || "(deleted character)";
 
-  // Suggestions: every character on the site (by label), so you can only link real people.
-  const optionsHtml = peopleOptionsHtml(chars, nodeId);
+  // Suggestions: only people already in this character's Relationships tab.
+  // (Typing any other existing character's name still works; it just isn't suggested.)
+  const relIds = new Set((character.relationships || []).map(r => r.charId).filter(Boolean));
+  const optionsHtml = chars
+    .filter(c => relIds.has(c.id) && c.id !== nodeId && c.name)
+    .map(c => `<option value="${escHtml(idx.labelOf.get(c.id))}">`).join("");
 
   function roleSection(roleKey, label, colorClass) {
-    const members = nodeData[roleKey] || [];
+    const own = nodeData[roleKey] || [];
+    // The order shown here is the order the tree is drawn in (own + other profiles' links).
+    const members = (eff.map[nodeId]?.[roleKey] || []).filter(id => chars.some(c => c.id === id));
     // order matters for children (birth order, left to right) and partners
     const canMove = roleKey !== "parents" && members.length > 1;
-    const pills   = members.map((id, i) => `
-      <span class="tree-pill">
-        ${canMove && i > 0 ? `<button type="button" class="tree-pill-mv" data-role="${roleKey}" data-id="${escHtml(id)}" data-dir="-1" title="Move earlier">‹</button>` : ""}
+    const mv = (id, dir, txt, title) =>
+      `<button type="button" class="tree-pill-mv" data-role="${roleKey}" data-id="${escHtml(id)}" data-dir="${dir}" title="${title}">${txt}</button>`;
+    const pills = members.map((id, i) => {
+      const isOwn = own.includes(id);
+      const src = isOwn ? null : (inh[roleKey] || []).find(x => x.id === id);
+      return `
+      <span class="tree-pill${src ? " tree-pill--inherited" : ""}"${src ? ` title="Comes from ${escHtml(src.from.name)}'s tree — remove it there"` : ""}>
+        ${canMove && i > 0 ? mv(id, -1, "‹", "Move earlier") : ""}
         ${escHtml(labelOf(id))}
-        ${canMove && i < members.length - 1 ? `<button type="button" class="tree-pill-mv" data-role="${roleKey}" data-id="${escHtml(id)}" data-dir="1" title="Move later">›</button>` : ""}
-        <button class="tree-pill-rm" data-role="${roleKey}" data-id="${escHtml(id)}" title="Remove">✕</button>
-      </span>`).join("");
-    // links that only exist in another profile's tree: shown, but edited over there
-    const inheritedPills = (inh[roleKey] || [])
-      .filter(x => !members.includes(x.id))
-      .map(x => `
-      <span class="tree-pill tree-pill--inherited" title="Comes from ${escHtml(x.from.name)}'s tree — edit it there">
-        ${escHtml(labelOf(x.id))}
-        <a class="tree-pill-src" href="character.html?id=${escHtml(x.from.id)}" title="Open ${escHtml(x.from.name)}">↗</a>
-      </span>`).join("");
+        ${canMove && i < members.length - 1 ? mv(id, 1, "›", "Move later") : ""}
+        ${isOwn ? `<button class="tree-pill-rm" data-role="${roleKey}" data-id="${escHtml(id)}" title="Remove">✕</button>` : ""}
+        ${src ? `<a class="tree-pill-src" href="character.html?id=${escHtml(src.from.id)}" title="Open ${escHtml(src.from.name)}">↗</a>` : ""}
+      </span>`;
+    }).join("");
+    const inheritedPills = "";
 
     return `
       <div class="tree-sb-section">
@@ -1576,21 +1582,60 @@ function showNodeEditSidebar(charId, nodeId) {
       const role = btn.dataset.role;
       const moveId = btn.dataset.id;
       const dir  = parseInt(btn.dataset.dir, 10);
-      const char2 = getCharacters().find(c => c.id === charId);
-      const map2  = getTreeMap(char2);
-      const list  = map2[nodeId]?.[role];
-      if (!list) return;
-      const i = list.indexOf(moveId), j = i + dir;
-      if (i < 0 || j < 0 || j >= list.length) return;
-      const other = list[j];
+      const chars2 = getCharacters();
+      const char2  = chars2.find(c => c.id === charId);
+      if (!char2) return;
+      // Work from the order that is actually drawn, not just this profile's own list.
+      const shown = buildEffectiveTree(char2, chars2).map[nodeId]?.[role] || [];
+      const i = shown.indexOf(moveId), j = i + dir;
+      if (i < 0 || j < 0 || j >= shown.length) return;
+      const other = shown[j];
+      const now = new Date().toISOString();
+
+      // Swap the pair in EVERY profile's tree that lists both, so the order is the same
+      // on every family tree these people appear in. Siblings share their order across
+      // all of their parents' lists.
       const swapIn = arr => {
+        if (!Array.isArray(arr)) return false;
         const a = arr.indexOf(moveId), b = arr.indexOf(other);
-        if (a >= 0 && b >= 0) { arr[a] = other; arr[b] = moveId; }
+        if (a < 0 || b < 0) return false;
+        arr[a] = other; arr[b] = moveId;
+        return true;
       };
-      // siblings share their order across all of their parents' lists
-      if (role === "children") Object.values(map2).forEach(nd => swapIn(nd.children));
-      else swapIn(list);
-      await saveTreeMap(charId, map2);
+      chars2.forEach(c => {
+        const tm = c.treeData;
+        if (!tm || typeof tm !== "object" || Array.isArray(tm)) return;
+        const lists = role === "children"
+          ? Object.values(tm).map(nd => nd && nd.children)
+          : [tm[nodeId] && tm[nodeId][role]];
+        let hit = false;
+        lists.forEach(l => { if (swapIn(l)) hit = true; });
+        if (hit) c.updatedAt = now;
+      });
+
+      // If the two never share a list anywhere (e.g. one is only on this profile's tree and
+      // the other only on another's), or the drawn order didn't change, record the order
+      // explicitly on this profile's own tree.
+      const after = buildEffectiveTree(char2, chars2).map[nodeId]?.[role] || [];
+      if (after.indexOf(moveId) !== j) {
+        const map2 = getTreeMap(char2);
+        const blank = () => ({ parents: [], partners: [], children: [] });
+        if (!map2[nodeId]) map2[nodeId] = blank();
+        const first  = dir < 0 ? moveId : other;
+        const second = dir < 0 ? other  : moveId;
+        const lst = map2[nodeId][role].filter(x => x !== first && x !== second);
+        lst.push(first, second);
+        map2[nodeId][role] = lst;
+        [first, second].forEach(x => {
+          if (!map2[x]) map2[x] = blank();
+          const back = role === "children" ? "parents" : role === "parents" ? "children" : "partners";
+          if (!map2[x][back].includes(nodeId)) map2[x][back].push(nodeId);
+        });
+        char2.treeData = map2;
+        char2.updatedAt = now;
+      }
+
+      await saveCharacters(chars2);
       showNodeEditSidebar(charId, nodeId);
       redrawTree(charId);
     });
@@ -1616,7 +1661,6 @@ function showNodeEditSidebar(charId, nodeId) {
       if (found.length === 1) {
         targetId = found[0].id;
       } else {
-        if (!confirm(`"${text}" isn't an existing character. Create a mini profile for them?`)) return;
         const mini = makeMini(text, char2);
         chars2.push(mini);
         targetId = mini.id;
@@ -1730,15 +1774,23 @@ function layoutFamilyTree(map, focalKey) {
 
   // 2. partner units
   function chainOrder(comp) {
-    if (comp.length < 3) return comp.slice().sort(byDisc);
+    if (comp.length < 2) return comp.slice();
+    if (comp.length === 2) return comp.slice().sort(byDisc);
     const inComp = new Set(comp);
-    const nbrs = n => get(n).partners.filter(p => inComp.has(p)).sort(byDisc);
+    const nbrs = n => get(n).partners.filter(p => inComp.has(p) && p !== n);   // list order = user's order
+    // One person with several partners: partners left to right in the order of their list.
+    const hubs = comp.filter(n => nbrs(n).length === comp.length - 1);
+    if (hubs.length === 1 && comp.every(n => n === hubs[0] || nbrs(n).length === 1)) {
+      const ps = nbrs(hubs[0]);
+      return [ps[0], hubs[0], ...ps.slice(1)];
+    }
     const start = comp.slice().sort((a, b) => nbrs(a).length - nbrs(b).length || byDisc(a, b))[0];
     const out = [], seen = new Set();
     (function walk(n) {
       seen.add(n); out.push(n);
       nbrs(n).forEach(p => { if (!seen.has(p)) walk(p); });
     })(start);
+    comp.forEach(n => { if (!seen.has(n)) out.push(n); });
     return out;
   }
   const sibOf = u => {
@@ -1820,9 +1872,42 @@ function layoutFamilyTree(map, focalKey) {
     const items = unitsByRow.get(g).map(u => ({
       u, d: (down ? centerOf(u, "parents", -1) : centerOf(u, "children", 1)) ?? u.cx,
     }));
-    items.sort((a, b) => (q(a.d) - q(b.d)) || (a.u.sib - b.u.sib) || (a.u.cx - b.u.cx));
-    unitsByRow.set(g, items.map(i => i.u));
-    solveRow(unitsByRow.get(g), items.map(i => i.d));
+    const cmp = (a, b) => (q(a.d) - q(b.d)) || (a.u.sib - b.u.sib) || (a.u.cx - b.u.cx);
+
+    // Siblings must stay in the order of their parent's "children" list, whatever else pulls
+    // on them. Build "A before B" constraints and sort with them (smallest desired x first
+    // among the units that are free to go next).
+    const itemOf = new Map();
+    items.forEach(it => it.u.members.forEach(m => itemOf.set(m, it)));
+    const succ  = new Map(items.map(it => [it, new Set()]));
+    const indeg = new Map(items.map(it => [it, 0]));
+    const doneParents = new Set();
+    items.forEach(it => it.u.members.forEach(m => get(m).parents.forEach(p => {
+      if (doneParents.has(p)) return;
+      doneParents.add(p);
+      let prev = null;
+      get(p).children.forEach(c => {
+        const cur = itemOf.get(c);
+        if (!cur) return;
+        if (prev && prev !== cur && !succ.get(prev).has(cur)) {
+          succ.get(prev).add(cur);
+          indeg.set(cur, indeg.get(cur) + 1);
+        }
+        prev = cur;
+      });
+    })));
+    const ordered = [], left = new Set(items);
+    while (left.size) {
+      let cand = [...left].filter(it => indeg.get(it) === 0);
+      if (!cand.length) cand = [...left];          // contradictory lists: ignore the constraints
+      cand.sort(cmp);
+      const pick = cand[0];
+      left.delete(pick);
+      ordered.push(pick);
+      succ.get(pick).forEach(n => indeg.set(n, indeg.get(n) - 1));
+    }
+    unitsByRow.set(g, ordered.map(i => i.u));
+    solveRow(unitsByRow.get(g), ordered.map(i => i.d));
   };
   for (let it = 0; it < 6; it++) {
     rowKeys.slice(1).forEach(g => pass(g, true));
@@ -2396,8 +2481,6 @@ async function handleRelFormSubmit(e) {
     return;
   }
   if (unknown.length) {
-    const list = [...new Set(unknown)];
-    if (!confirm(`These names don't match any character on this site:\n\n${list.join(", ")}\n\nCreate a mini profile for each of them? (Cancel to go back and fix a typo.)`)) return;
     const created = new Map();
     entries.forEach(r => {
       if (r.person) return;

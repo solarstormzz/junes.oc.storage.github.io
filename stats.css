@@ -111,12 +111,14 @@
   text-overflow: ellipsis;
 }
 .bar-track {
+  display: block;
   height: 14px;
   background: var(--surface);
   border-radius: 3px;
   overflow: hidden;
 }
 .bar-fill {
+  display: block;
   height: 100%;
   background: var(--accent);
   border-radius: 3px;

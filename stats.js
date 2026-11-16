@@ -37,17 +37,28 @@
     return [...map.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
   }
 
+  // Same as groupBy, but adds a "None" row (always first, so it never hides behind
+  // "+ more") listing characters that have nothing filled in for this field.
+  function groupWithNone(chars, keysFn) {
+    const rows = groupBy(chars, keysFn);
+    const none = chars.filter(c => ![].concat(keysFn(c)).some(v => clean(v)));
+    if (none.length) rows.unshift({ label: "None", count: none.length, chars: none, soft: true });
+    return rows;
+  }
+
   function ageOf(c) {
     const m = clean(c.age).match(/\d+/);
     return m ? parseInt(m[0], 10) : null;
   }
 
   const AGE_BUCKETS = [
-    { label: "Under 13", test: a => a < 13 },
-    { label: "13–17",    test: a => a >= 13 && a <= 17 },
-    { label: "18–24",    test: a => a >= 18 && a <= 24 },
-    { label: "25–34",    test: a => a >= 25 && a <= 34 },
-    { label: "35–49",    test: a => a >= 35 && a <= 49 },
+    { label: "Under 10", test: a => a <= 10 },          // 10 is included here so nobody falls in a gap
+    { label: "11–13",    test: a => a >= 11 && a <= 13 },
+    { label: "14–18",    test: a => a >= 14 && a <= 18 },
+    { label: "19–24",    test: a => a >= 19 && a <= 24 },
+    { label: "25–30",    test: a => a >= 25 && a <= 30 },
+    { label: "31–39",    test: a => a >= 31 && a <= 39 },
+    { label: "40–49",    test: a => a >= 40 && a <= 49 },
     { label: "50+",      test: a => a >= 50 },
   ];
 
@@ -171,7 +182,7 @@ function splitOccupation(o) {
   return `
       <div class="bar-row${i >= limit ? " bar-extra" : ""}" data-tip="${addTip(r.label, r.chars)}">
         <span class="bar-label">${escHtml(r.label)}</span>
-        <span class="bar-track"><span class="bar-fill" style="width:${(r.count / max) * 100}%;background:${color}"></span></span>
+        <span class="bar-track"><span class="bar-fill" style="width:${(r.count / max) * 100}%;background:${color} !important"></span></span>
         <span class="bar-val">${r.count}<span class="bar-pct">${pct}</span></span>
       </div>`;
     }).join("");
@@ -252,11 +263,11 @@ function splitOccupation(o) {
     const ageCard = card("Age ranges", "The first number in the Age field is used, so text like \"20s\" or \"~300 (looks 25)\" still counts.", barChart(ageRows, 10));
 
     // Pronouns / heritage / occupation
-    const pronounCard  = card("Pronouns", "", barChart(groupBy(chars, c => normPronouns(c.pronouns)), 10));
-    const heritageCard = card("Heritage", "Split on commas, slashes, hyphens, “&” and “and”, so mixed heritage counts for each part.", barChart(groupBy(chars, c => splitHeritage(c.heritage)), 10));
+    const pronounCard  = card("Pronouns", "", barChart(groupWithNone(chars, c => normPronouns(c.pronouns)), 10));
+    const heritageCard = card("Heritage", "Split on commas, slashes, hyphens, “&” and “and”, so mixed heritage counts for each part.", barChart(groupWithNone(chars, c => splitHeritage(c.heritage)), 10));
     const occCard = card("Occupations",
   "Brackets and anything after a comma are ignored; “/” and “&” count as separate jobs.",
-  barChart(groupBy(chars, c => splitOccupation(c.occupation)), 10));
+  barChart(groupWithNone(chars, c => splitOccupation(c.occupation)), 10));
 
     // Birthday months
     const monthChars = Array.from({ length: 12 }, () => []);

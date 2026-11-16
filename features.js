@@ -633,10 +633,50 @@
   }
 
   // ════════════════════════════════════════════════════════════════════
+  // WORD COUNTERS
+  // Live count under the overview / background / story text boxes, and a permanent
+  // count at the bottom of the story reader. Refreshed whenever an editor or the
+  // reader is opened (their text is filled in by script.js just before that).
+  // ════════════════════════════════════════════════════════════════════
+  const countWords = t => { const m = String(t || "").trim().match(/\S+/g); return m ? m.length : 0; };
+  const wordLabel = n => `${n.toLocaleString()} ${n === 1 ? "word" : "words"}`;
+  const counterUpdaters = [];
+
+  function attachCounter(source, readValue, placeAfter, cls) {
+    if (!source || !placeAfter || source.dataset.wcAttached) return;
+    source.dataset.wcAttached = "1";
+    const el = document.createElement("div");
+    el.className = cls;
+    placeAfter.insertAdjacentElement("afterend", el);
+    const update = () => { el.textContent = wordLabel(countWords(readValue())); };
+    update();
+    counterUpdaters.push(update);
+    return update;
+  }
+
+  function initWordCounters() {
+    ["oef-overview", "oef-background", "ef-overview", "ef-background", "sef-body"].forEach(id => {
+      const ta = document.getElementById(id);
+      if (!ta) return;
+      const update = attachCounter(ta, () => ta.value, ta, "word-count");
+      if (update) ta.addEventListener("input", update);
+    });
+    const body = document.getElementById("story-reader-body");
+    attachCounter(body, () => body.textContent, body, "word-count word-count--reader");
+
+    const refresh = () => { counterUpdaters.forEach(fn => fn()); setTimeout(() => counterUpdaters.forEach(fn => fn()), 0); };
+    const watch = new MutationObserver(refresh);
+    ["overview-editor-overlay", "editor-overlay", "story-editor-overlay", "story-reader-overlay"].forEach(id => {
+      const ov = document.getElementById(id);
+      if (ov) watch.observe(ov, { attributes: true, attributeFilter: ["class"] });
+    });
+  }
+
+  // ════════════════════════════════════════════════════════════════════
   // INIT
   // ════════════════════════════════════════════════════════════════════
   document.addEventListener("DOMContentLoaded", () => {
-    const steps = [injectThemeToggle, startImagePolish, initSearchShortcut, initTabHash, initBackToTop, initPrintButton, offerPendingUndo];
+    const steps = [injectThemeToggle, startImagePolish, initSearchShortcut, initTabHash, initBackToTop, initPrintButton, initWordCounters, offerPendingUndo];
     steps.forEach(fn => { try { fn(); } catch (e) { console.error("features.js:", fn.name, e); } });
     try { renderBirthdayBanner(""); } catch (e) { console.error(e); }
   });
